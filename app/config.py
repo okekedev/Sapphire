@@ -131,9 +131,50 @@ class Settings(BaseSettings):
     # ── CORS ──
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
+    # ── Azure Key Vault ──
+    azure_keyvault_url: str = "https://kv-sapphire-okeke.vault.azure.net"
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
 
 
-settings = Settings()
+def _load_from_keyvault(s: "Settings") -> "Settings":
+    """Overlay Key Vault secrets on top of settings loaded from .env.
+
+    Only runs if AZURE_KEYVAULT_URL is set. Uses DefaultAzureCredential
+    so it works with `az login` locally and Managed Identity in production.
+    Secret names map directly to setting names (underscores → hyphens).
+
+    Secrets managed in Key Vault:
+      database-url, secret-key, jwt-secret-key, encryption-key
+    """
+    if not s.azure_keyvault_url:
+        return s
+
+    try:
+        from app.core.services.keyvault_service import KeyVaultService
+        kv = KeyVaultService(s.azure_keyvault_url)
+
+        overrides = {}
+        mappings = {
+            "database-url": "database_url",
+            "secret-key": "secret_key",
+            "jwt-secret-key": "jwt_secret_key",
+            "encryption-key": "encryption_key",
+        }
+        for secret_name, attr in mappings.items():
+            value = kv.get(secret_name)
+            if value:
+                overrides[attr] = value
+
+        if overrides:
+            return s.model_copy(update=overrides)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Key Vault unavailable, using .env values: {e}")
+
+    return s
+
+
+settings = _load_from_keyvault(Settings())

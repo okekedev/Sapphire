@@ -38,6 +38,11 @@ stripe
 # --- ngrok (local tunnel for Twilio webhook dev) ---
 pyngrok
 
+# --- Azure ---
+azure-identity
+azure-keyvault-secrets
+anthropic[azure]
+
 # --- Utilities ---
 python-dotenv
 
