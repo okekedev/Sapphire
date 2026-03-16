@@ -577,19 +577,78 @@ async def lifespan(app: FastAPI):
 
 ---
 
+## Agent Architecture
+
+### Core Principle: Self-Maintaining Agents
+
+All agents (department employees + platform agents) store their knowledge in `employees.system_prompt` and `departments.documentation` in the DB. When an external API changes or the agent discovers new capabilities, it uses the `self-document` tool to write updated knowledge back to its own record. No deployments, no prompt file edits — the agent owns its own knowledge.
+
+### Two-Level Hierarchy
+
+```
+Department Employees (strategy, decisions, coordination)
+├── Sales: Account Executive, SDR, Customer Success, Sales Analyst
+├── Marketing: Social Media Manager, Content Creator, SEO Specialist,
+│             Email Marketer, Analytics Analyst, Brand Manager, Campaign Manager
+├── Operations: Project Manager, Process Analyst, Resource Coordinator
+├── Finance: Financial Analyst, Bookkeeper, Budget Manager
+└── Admin: Executive Assistant, HR Coordinator, Compliance Officer
+          ↓ delegates platform execution to
+Platform Agents (API execution layer — self-maintaining)
+├── Marketing Platform Agent  ← one agent for ALL marketing platforms
+│   knows: Facebook, Instagram, LinkedIn, TikTok, YouTube, Pinterest,
+│          Google Analytics, Google Search Console, Google Business Profile,
+│          Gmail, Yelp
+├── Comms Agent
+│   knows: Twilio SMS, Voice, WhatsApp APIs
+└── (future) Finance Agent
+    knows: QuickBooks, Stripe, invoicing APIs
+          ↓ calls
+/tools/proxy (credential-injected API calls to external platforms)
+```
+
+### Why One Marketing Platform Agent (not per-platform agents)
+
+A single agent with cross-platform knowledge can:
+- Post content to multiple platforms in one call, adapting format per platform
+- Reason about consistency (same campaign voice across channels)
+- Self-document API changes across all platforms in one knowledge base
+- Make cross-platform decisions ("LinkedIn prefers no hashtags, Twitter needs them")
+
+Per-platform agents would require department employees to orchestrate 6+ agents for a single campaign task.
+
+### Self-Learning Loop
+
+```
+1. Agent calls platform API → gets error (deprecated endpoint, changed param)
+2. Agent uses WebFetch → pulls platform's changelog / API reference
+3. Agent uses self-document → writes corrected knowledge to its system_prompt in DB
+4. Agent retries successfully
+5. All future calls use the updated knowledge — no human intervention needed
+```
+
+This also applies proactively: agent discovers a new API feature, documents it for future use.
+
+### No MCPs
+
+Platform integrations live inside the agent's system prompt + the existing `/tools/proxy` endpoint. No external MCP servers to run, version, or maintain. When a platform API evolves, the agent updates itself.
+
+---
+
 ## Execution Order
 
 Recommended order to minimize breakage:
 
 1. **Phase 1** — SDK rewrite (biggest change, most files touched)
-2. **Phase 2** — Remove IT tab + relocate internal_tools
-3. **Phase 3** — Remove ngrok
-4. **Phase 4** — Clean up unused platform configs
-5. **Phase 9** — Simplify startup
-6. **Phase 5** — Dockerfile + Container Apps
-7. **Phase 6** — Static Web Apps for frontend
-8. **Phase 7** — Database migration
-9. **Phase 8** — Twilio webhook update
+2. **Phase 1b** — Create Platform Agents (Marketing Platform Agent, Comms Agent) as DB seed records
+3. **Phase 2** — Remove IT tab + relocate internal_tools
+4. **Phase 3** — Remove ngrok
+5. **Phase 4** — Clean up unused platform configs
+6. **Phase 9** — Simplify startup
+7. **Phase 5** — Dockerfile + Container Apps
+8. **Phase 6** — Static Web Apps for frontend
+9. **Phase 7** — Database migration
+10. **Phase 8** — Twilio webhook update
 
 Phases 1-5 can be done locally and tested before any infrastructure changes. Phases 6-8 are deployment/infrastructure only.
 
@@ -599,6 +658,7 @@ Phases 1-5 can be done locally and tested before any infrastructure changes. Pha
 
 ### Files to CREATE:
 - `app/core/services/anthropic_service.py` (~300 lines)
+- `scripts/seed_platform_agents.py` — seeds Marketing Platform Agent + Comms Agent as employee records with full system prompts
 - `Dockerfile`
 - `docker-compose.yml`
 - `frontend/staticwebapp.config.json`
