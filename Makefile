@@ -1,0 +1,49 @@
+# ═══════════════════════════════════════════════════════════════
+# Business Automation Platform — Makefile
+# Run common tasks with: make <target>
+# ═══════════════════════════════════════════════════════════════
+
+PYTHON = python3
+VENV = venv
+PIP = pip
+PY = python
+UVICORN = uvicorn
+APP = app.main:app
+PORT = 8000
+# NOTE: Run `source venv/bin/activate` before using make targets,
+# or use system Python with all deps installed.
+
+.PHONY: help setup install server test logs stop restart clean
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
+
+setup: ## Full setup: create venv, install deps
+	$(PYTHON) -m venv $(VENV)
+	$(PIP) install --upgrade pip
+	$(PIP) install -r requirements.txt
+
+install: ## Install/update dependencies
+	$(PIP) install -r requirements.txt
+
+server: ## Start the FastAPI server (foreground with logs)
+	$(UVICORN) $(APP) --host 0.0.0.0 --port $(PORT) --log-level debug 2>&1 | tee server.log
+
+server-bg: ## Start server in background
+	nohup $(UVICORN) $(APP) --host 0.0.0.0 --port $(PORT) --log-level debug >> server.log 2>&1 &
+	@echo "Server started in background. Logs: server.log"
+
+test: ## Run unit tests (no server needed)
+	$(PY) -m pytest tests/ -v
+
+logs: ## Tail the server log
+	tail -50 server.log
+
+stop: ## Stop the background server
+	@pkill -f "uvicorn $(APP)" 2>/dev/null && echo "Server stopped" || echo "No server running"
+
+restart: stop server-bg ## Restart the background server
+
+clean: ## Remove caches and temp files
+	find . -type d -name __pycache__ -not -path './venv/*' -exec rm -rf {} + 2>/dev/null || true
+	rm -rf .pytest_cache tests/.pytest_cache server.log

@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+frontend/node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+*.egg-info/
+
+# Build output
+frontend/dist/
+dist/
+build/
+
+# Environment & secrets
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Testing artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Runtime business files (per-business generated content)
+businesses/
+
+# Lock files
+package-lock.json
+requirements.lock

@@ -1,0 +1,46 @@
+# CEO James — requirements (unpinned, install latest stable)
+# Lock versions after confirming compatibility: pip freeze > requirements.lock
+
+# --- Core Framework ---
+fastapi
+uvicorn[standard]
+pydantic[email]
+pydantic-settings
+python-multipart
+
+# --- Database ---
+sqlalchemy[asyncio]
+asyncpg
+
+# --- Auth ---
+python-jose[cryptography]
+passlib[bcrypt]
+bcrypt
+
+# --- HTTP Client (async) ---
+httpx
+
+# --- Encryption ---
+cryptography
+
+# --- Logging ---
+structlog
+
+# --- Scheduling ---
+apscheduler
+
+# --- Twilio (SMS, voice calls, tracking numbers) ---
+twilio
+
+# --- Stripe (invoicing, subscriptions, billing) ---
+stripe
+
+# --- ngrok (local tunnel for Twilio webhook dev) ---
+pyngrok
+
+# --- Utilities ---
+python-dotenv
+
+# --- Testing ---
+pytest
+pytest-asyncio
