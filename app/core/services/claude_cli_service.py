@@ -1054,7 +1054,7 @@ Fall back to direct SQL for reads or when no endpoint covers your need.
         self,
         business_id: UUID,
         message: str,
-        file_stem: str = "james_coo",
+        file_stem: str = "ivy",
         extra_context: Optional[str] = None,
         db: Optional[AsyncSession] = None,
         allowed_tools: Optional[list[str]] = None,
@@ -1063,7 +1063,7 @@ Fall back to direct SQL for reads or when no endpoint covers your need.
         Quick call to a named employee — used for onboarding, main assistant chat, etc.
 
         Args:
-            file_stem: Employee file_stem to look up (default: james_coo for backwards compat).
+            file_stem: Employee file_stem to look up (default: ivy — Administration head).
             allowed_tools: Optional list of tools to enable (e.g. ["WebSearch", "WebFetch"]).
         """
         # Load employee system prompt from DB (required)
