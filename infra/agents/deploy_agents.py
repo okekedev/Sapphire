@@ -1,14 +1,17 @@
 """Deploy all Sapphire agents to Azure AI Foundry.
 
 Usage:
-    # Deploy all agents (new business signup)
-    python infra/agents/deploy_agents.py --endpoint https://ai-sapphire-prod.services.ai.azure.com
+    # Deploy all agents and save IDs to Key Vault
+    python infra/agents/deploy_agents.py
 
-    # Deploy with business context injected
-    python infra/agents/deploy_agents.py --endpoint https://... --business-id <uuid>
+    # Deploy with business context injected into instructions
+    python infra/agents/deploy_agents.py --business-id <uuid>
 
     # Deploy a single agent
-    python infra/agents/deploy_agents.py --endpoint https://... --agent grace
+    python infra/agents/deploy_agents.py --agent grace
+
+    # Skip saving to Key Vault (just print IDs)
+    python infra/agents/deploy_agents.py --no-keyvault
 
 Auth: DefaultAzureCredential (az login locally, managed identity in production)
 """
@@ -105,11 +108,24 @@ def deploy_agent(client, agent_def: dict, context: dict | None = None) -> str:
     return agent.id
 
 
+KEYVAULT_URL = "https://kv-sapphire-okeke.vault.azure.net"
+FOUNDRY_ENDPOINT = "https://ai-sapphire-prod.services.ai.azure.com"
+
+
+def save_agent_ids_to_keyvault(agent_ids: dict, credential):
+    """Store agent IDs as a single JSON secret in Key Vault."""
+    from azure.keyvault.secrets import SecretClient
+    client = SecretClient(vault_url=KEYVAULT_URL, credential=credential)
+    client.set_secret("foundry-agent-ids", json.dumps(agent_ids))
+    print(f"  Saved to Key Vault: {KEYVAULT_URL} → foundry-agent-ids")
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--endpoint", required=True, help="Azure AI Foundry endpoint URL")
+    parser.add_argument("--endpoint", default=FOUNDRY_ENDPOINT, help="Azure AI Foundry endpoint URL")
     parser.add_argument("--agent", default="all", help="Agent name or 'all'")
     parser.add_argument("--business-id", help="Business ID to inject context from DB")
+    parser.add_argument("--no-keyvault", action="store_true", help="Skip saving IDs to Key Vault")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
@@ -117,7 +133,6 @@ def main():
     credential = DefaultAzureCredential()
     client = AIProjectClient(endpoint=args.endpoint, credential=credential)
 
-    # Load business context from DB if provided
     context = None
     if args.business_id:
         context = load_business_context(args.business_id)
@@ -136,8 +151,12 @@ def main():
     for name, agent_id in deployed.items():
         print(f"  {name}: {agent_id}")
 
-    if args.business_id:
-        save_agent_ids(args.business_id, deployed)
+    if not args.no_keyvault:
+        print("\nSaving agent IDs to Key Vault...")
+        save_agent_ids_to_keyvault(deployed, credential)
+    else:
+        print("\nSkipped Key Vault. Add this to your .env as FOUNDRY_AGENT_IDS:")
+        print(f"  {json.dumps(deployed)}")
 
 
 def load_business_context(business_id: str) -> dict:
@@ -158,26 +177,6 @@ def load_business_context(business_id: str) -> dict:
             return dict(row)
 
     return asyncio.run(_load())
-
-
-def save_agent_ids(business_id: str, agent_ids: dict):
-    """Persist Foundry agent IDs back to the business record (one column per agent)."""
-    import asyncio
-    from app.database import AsyncSessionLocal
-    from sqlalchemy import text
-
-    async def _save():
-        async with AsyncSessionLocal() as db:
-            set_clauses = ", ".join(f"foundry_agent_{name} = :{name}" for name in agent_ids)
-            params = {name: agent_id for name, agent_id in agent_ids.items()}
-            params["id"] = business_id
-            await db.execute(
-                text(f"UPDATE businesses SET {set_clauses} WHERE id = :id"),
-                params,
-            )
-            await db.commit()
-
-    asyncio.run(_save())
 
 
 if __name__ == "__main__":

@@ -148,6 +148,10 @@ class Settings(BaseSettings):
     # ── Azure AI Foundry ──
     foundry_endpoint: str = "https://ai-sapphire-prod.services.ai.azure.com"
     foundry_default_model: str = "claude-haiku-4-5"
+    # JSON map of agent name → Foundry agent ID, stored as a single Key Vault secret.
+    # Set by deploy_agents.py after first deployment. Example:
+    # {"grace":"asst_abc","ivy":"asst_def","quinn":"asst_ghi","luna":"asst_jkl","morgan":"asst_mno","riley":"asst_pqr"}
+    foundry_agent_ids: str = "{}"
 
     @property
     def is_production(self) -> bool:
@@ -178,6 +182,7 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
             "jwt-secret-key": "jwt_secret_key",
             "encryption-key": "encryption_key",
             "azure-ad-client-secret": "azure_ad_client_secret",
+            "foundry-agent-ids": "foundry_agent_ids",
         }
         for secret_name, attr in mappings.items():
             value = kv.get(secret_name)

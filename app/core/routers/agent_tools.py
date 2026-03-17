@@ -6,31 +6,32 @@ Self-update strategy:
 - Learned section count hits MAX_LEARNED_SECTIONS → trigger re-consolidation
 - Re-consolidation: ask Claude to rewrite instructions cleanly, folding all
   learnings back into the relevant sections. Result replaces the full instructions.
+
+Agent IDs are loaded from settings.foundry_agent_ids (Key Vault secret
+'foundry-agent-ids') — a JSON map of { agent_name: foundry_agent_id }.
+No DB access needed.
 """
 
+import json
 import re
 import logging
 from datetime import datetime, timezone
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
 from azure.identity import DefaultAzureCredential
 from azure.ai.projects import AIProjectClient
 
-from app.database import get_db
-from app.core.services.auth_service import get_current_user_id
 from app.config import settings
 
 router = APIRouter(prefix="/agent-tools", tags=["Agent Tools"])
 logger = logging.getLogger(__name__)
 
-MAX_LEARNED_SECTIONS = 20  # trigger re-consolidation after this many learned entries
+MAX_LEARNED_SECTIONS = 20
+ALLOWED_AGENTS = {"grace", "ivy", "quinn", "luna", "morgan", "riley"}
 
 
 class SelfUpdateRequest(BaseModel):
-    business_id: UUID
     agent_name: str
     section: str
     knowledge: str
@@ -43,12 +44,23 @@ def _get_foundry_client() -> AIProjectClient:
     )
 
 
+def _get_agent_id(agent_name: str) -> str:
+    """Look up Foundry agent ID from config (Key Vault secret foundry-agent-ids)."""
+    agent_ids = json.loads(settings.foundry_agent_ids or "{}")
+    agent_id = agent_ids.get(agent_name.lower())
+    if not agent_id:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No Foundry agent ID configured for '{agent_name}'. Run deploy_agents.py first.",
+        )
+    return agent_id
+
+
 def _upsert_learned_section(instructions: str, section: str, knowledge: str) -> str:
     """Replace existing section with same label, or append if new."""
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     new_entry = f"\n\n## Learned: {section} ({timestamp})\n{knowledge}"
 
-    # Replace if section already exists (any date)
     pattern = rf"\n\n## Learned: {re.escape(section)} \(\d{{4}}-\d{{2}}-\d{{2}}\)\n.*?(?=\n\n##|\Z)"
     if re.search(pattern, instructions, flags=re.DOTALL):
         return re.sub(pattern, new_entry, instructions, flags=re.DOTALL)
@@ -74,7 +86,7 @@ async def _consolidate(client: AIProjectClient, agent_id: str, instructions: str
 
     thread = client.agents.create_thread()
     client.agents.create_message(thread_id=thread.id, role="user", content=consolidation_prompt)
-    run = client.agents.create_and_process_run(thread_id=thread.id, agent_id=agent_id)
+    client.agents.create_and_process_run(thread_id=thread.id, agent_id=agent_id)
 
     messages = client.agents.list_messages(thread_id=thread.id)
     for msg in messages:
@@ -85,28 +97,12 @@ async def _consolidate(client: AIProjectClient, agent_id: str, instructions: str
 
 
 @router.post("/self-update")
-async def self_update(
-    payload: SelfUpdateRequest,
-    current_user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
+async def self_update(payload: SelfUpdateRequest):
     """Agent calls this when it learns something worth persisting."""
-    from sqlalchemy import text
-
-    col = f"foundry_agent_{payload.agent_name.lower()}"
-    allowed = {"grace", "ivy", "quinn", "luna", "morgan", "riley"}
-    if payload.agent_name.lower() not in allowed:
+    if payload.agent_name.lower() not in ALLOWED_AGENTS:
         raise HTTPException(status_code=400, detail=f"Unknown agent '{payload.agent_name}'")
 
-    result = await db.execute(
-        text(f"SELECT {col} FROM businesses WHERE id = :id"),
-        {"id": str(payload.business_id)},
-    )
-    row = result.fetchone()
-    if not row or not row[0]:
-        raise HTTPException(status_code=404, detail=f"No Foundry agent found for '{payload.agent_name}'")
-
-    agent_id = row[0]
+    agent_id = _get_agent_id(payload.agent_name)
 
     try:
         client = _get_foundry_client()
@@ -115,7 +111,6 @@ async def self_update(
 
         updated = _upsert_learned_section(current, payload.section, payload.knowledge)
 
-        # Re-consolidate if too many learned sections
         consolidated = False
         if _count_learned_sections(updated) >= MAX_LEARNED_SECTIONS:
             logger.info(f"[self_update] {payload.agent_name} hitting {MAX_LEARNED_SECTIONS} sections — consolidating")
@@ -133,6 +128,8 @@ async def self_update(
             "learned_sections": _count_learned_sections(updated),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"[self_update] Failed for {payload.agent_name}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
