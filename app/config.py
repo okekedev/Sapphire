@@ -70,7 +70,8 @@ class Settings(BaseSettings):
     # Redirect URI to register: http://localhost:8000/api/v1/auth/microsoft/callback
     azure_ad_tenant_id: str = ""
     azure_ad_client_id: str = ""
-    azure_ad_client_secret: str = ""
+    # No client secret — auth uses DefaultAzureCredential (federated identity credentials).
+    # Managed Identity in production, az login locally. Both registered on the app registration.
     azure_ad_group_id: str = ""  # Object ID of "Sapphire Users" group; empty = skip group check
     azure_ad_redirect_uri: str = "http://localhost:8000/api/v1/auth/microsoft/callback"
     frontend_url: str = "http://localhost:5173"
@@ -181,7 +182,6 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
             "secret-key": "secret_key",
             "jwt-secret-key": "jwt_secret_key",
             "encryption-key": "encryption_key",
-            "azure-ad-client-secret": "azure_ad_client_secret",
             "foundry-agent-ids": "foundry_agent_ids",
         }
         for secret_name, attr in mappings.items():

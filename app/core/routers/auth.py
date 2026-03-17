@@ -5,7 +5,8 @@ Authentication routes — registration, login, token refresh, Azure AD SSO.
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from azure.identity.aio import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential
+from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -25,12 +26,25 @@ router = APIRouter(prefix="/auth")
 auth_service = AuthService()
 
 
+_credential = DefaultAzureCredential()  # reused across requests — handles token caching
+
+
 def _msal_app():
+    """MSAL app using DefaultAzureCredential as client assertion.
+
+    No client secret. In production, the Container App's Managed Identity
+    (id-sapphire-prod) is a registered federated credential on the Sapphire
+    app registration. Locally, the az login user is registered the same way.
+    """
     import msal
     return msal.ConfidentialClientApplication(
         settings.azure_ad_client_id,
         authority=f"https://login.microsoftonline.com/{settings.azure_ad_tenant_id}",
-        client_credential=settings.azure_ad_client_secret,
+        client_credential={
+            "client_assertion": lambda: _credential.get_token(
+                "api://AzureADTokenExchange"
+            ).token
+        },
     )
 
 
@@ -115,11 +129,10 @@ async def microsoft_callback(
         raise HTTPException(status_code=400, detail="No email in Azure AD token claims")
 
     # Validate group membership via Managed Identity → Microsoft Graph
-    # (DefaultAzureCredential: Managed Identity in Container Apps, az login locally)
     if settings.azure_ad_group_id and user_oid:
-        credential = DefaultAzureCredential()
+        async_credential = AsyncDefaultAzureCredential()
         try:
-            token = await credential.get_token("https://graph.microsoft.com/.default")
+            token = await async_credential.get_token("https://graph.microsoft.com/.default")
             async with httpx.AsyncClient() as http:
                 r = await http.post(
                     f"https://graph.microsoft.com/v1.0/users/{user_oid}/checkMemberGroups",
@@ -132,7 +145,7 @@ async def microsoft_callback(
                     detail="Access denied: not a member of the Sapphire Users group",
                 )
         finally:
-            await credential.close()
+            await async_credential.close()
 
     # Get or create user
     existing = await db.execute(select(User).where(User.email == email))
