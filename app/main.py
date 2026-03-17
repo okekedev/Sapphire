@@ -24,7 +24,7 @@ from app.config import settings
 # ── Core routers ──
 from app.core.routers import (
     auth, businesses, chat, cli, health,
-    notifications, organization, platforms,
+    notifications, organization, platforms, agent_tools,
 )
 # ── Department routers ──
 from app.marketing.routers import contacts, tracking_routing, email, content
@@ -197,6 +197,7 @@ app.include_router(health.router, prefix=settings.api_prefix, tags=["Health"])
 app.include_router(auth.router, prefix=settings.api_prefix, tags=["Auth"])
 app.include_router(businesses.router, prefix=settings.api_prefix, tags=["Businesses"])
 app.include_router(platforms.router, prefix=settings.api_prefix, tags=["Platforms"])
+app.include_router(agent_tools.router, prefix=settings.api_prefix, tags=["Agent Tools"])
 app.include_router(chat.router, prefix=settings.api_prefix)
 app.include_router(notifications.router, prefix=settings.api_prefix)
 app.include_router(cli.router, prefix=settings.api_prefix)

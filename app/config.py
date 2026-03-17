@@ -134,6 +134,10 @@ class Settings(BaseSettings):
     # ── Azure Key Vault ──
     azure_keyvault_url: str = "https://kv-sapphire-okeke.vault.azure.net"
 
+    # ── Azure AI Foundry ──
+    foundry_endpoint: str = "https://ai-sapphire-prod.services.ai.azure.com"
+    foundry_default_model: str = "claude-haiku-4-5"
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

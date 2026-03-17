@@ -48,7 +48,6 @@ def deploy_agent(client, agent_def: dict, context: dict | None = None) -> str:
         if tool == "web_search":
             tools.append({"type": "bing_grounding"})
         elif tool == "proxy":
-            # Internal tools proxy — defined as a function tool
             tools.append({
                 "type": "function",
                 "function": {
@@ -66,6 +65,34 @@ def deploy_agent(client, agent_def: dict, context: dict | None = None) -> str:
                     }
                 }
             })
+
+    # All agents get self_update — lets them update their own instructions when they learn something
+    tools.append({
+        "type": "function",
+        "function": {
+            "name": "self_update",
+            "description": (
+                "Update your own knowledge when you discover something new — an API change, "
+                "a new platform feature, a pattern in customer behavior, or anything that would "
+                "make you more effective next time. Call this proactively when you notice something "
+                "worth remembering."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "section": {
+                        "type": "string",
+                        "description": "Short label for what you're updating (e.g. 'Facebook API - post endpoint', 'Lead qualification - pricing objection')"
+                    },
+                    "knowledge": {
+                        "type": "string",
+                        "description": "What you learned, in plain language. Be specific and actionable."
+                    }
+                },
+                "required": ["section", "knowledge"]
+            }
+        }
+    })
 
     agent = client.agents.create_agent(
         model=agent_def["model"],
