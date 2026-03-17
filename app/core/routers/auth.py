@@ -5,6 +5,7 @@ Authentication routes — registration, login, token refresh, Azure AD SSO.
 from datetime import datetime, timedelta, timezone
 
 import httpx
+from azure.identity.aio import DefaultAzureCredential
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -104,27 +105,34 @@ async def microsoft_callback(
             detail=result.get("error_description", "Azure AD authentication failed"),
         )
 
-    # Validate group membership if a group ID is configured
-    if settings.azure_ad_group_id:
-        async with httpx.AsyncClient() as http:
-            r = await http.post(
-                "https://graph.microsoft.com/v1.0/me/checkMemberGroups",
-                headers={"Authorization": f"Bearer {result['access_token']}"},
-                json={"groupIds": [settings.azure_ad_group_id]},
-            )
-        if settings.azure_ad_group_id not in r.json().get("value", []):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: not a member of the Sapphire Users group",
-            )
-
     # Get user info from ID token claims
     claims = result.get("id_token_claims", {})
     email = claims.get("preferred_username") or claims.get("email", "")
     name = claims.get("name") or email
+    user_oid = claims.get("oid", "")  # Azure AD object ID
 
     if not email:
         raise HTTPException(status_code=400, detail="No email in Azure AD token claims")
+
+    # Validate group membership via Managed Identity → Microsoft Graph
+    # (DefaultAzureCredential: Managed Identity in Container Apps, az login locally)
+    if settings.azure_ad_group_id and user_oid:
+        credential = DefaultAzureCredential()
+        try:
+            token = await credential.get_token("https://graph.microsoft.com/.default")
+            async with httpx.AsyncClient() as http:
+                r = await http.post(
+                    f"https://graph.microsoft.com/v1.0/users/{user_oid}/checkMemberGroups",
+                    headers={"Authorization": f"Bearer {token.token}"},
+                    json={"groupIds": [settings.azure_ad_group_id]},
+                )
+            if settings.azure_ad_group_id not in r.json().get("value", []):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Access denied: not a member of the Sapphire Users group",
+                )
+        finally:
+            await credential.close()
 
     # Get or create user
     existing = await db.execute(select(User).where(User.email == email))
