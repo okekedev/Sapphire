@@ -161,16 +161,19 @@ def load_business_context(business_id: str) -> dict:
 
 
 def save_agent_ids(business_id: str, agent_ids: dict):
-    """Persist Foundry agent IDs back to the business record."""
+    """Persist Foundry agent IDs back to the business record (one column per agent)."""
     import asyncio
     from app.database import AsyncSessionLocal
     from sqlalchemy import text
 
     async def _save():
         async with AsyncSessionLocal() as db:
+            set_clauses = ", ".join(f"foundry_agent_{name} = :{name}" for name in agent_ids)
+            params = {name: agent_id for name, agent_id in agent_ids.items()}
+            params["id"] = business_id
             await db.execute(
-                text("UPDATE businesses SET foundry_agent_ids = :ids WHERE id = :id"),
-                {"ids": json.dumps(agent_ids), "id": business_id}
+                text(f"UPDATE businesses SET {set_clauses} WHERE id = :id"),
+                params,
             )
             await db.commit()
 

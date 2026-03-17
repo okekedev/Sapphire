@@ -1,6 +1,10 @@
--- Add Foundry agent IDs to businesses table.
--- Stores a JSON map of { agent_name: foundry_agent_id } populated at deployment time.
--- Example: { "grace": "asst_xxx", "riley": "asst_yyy", ... }
+-- Add Foundry agent IDs to businesses table (one column per agent).
+-- Populated by deploy_agents.py at business signup.
 
 ALTER TABLE businesses
-    ADD COLUMN IF NOT EXISTS foundry_agent_ids JSONB;
+    ADD COLUMN IF NOT EXISTS foundry_agent_grace  VARCHAR,
+    ADD COLUMN IF NOT EXISTS foundry_agent_ivy    VARCHAR,
+    ADD COLUMN IF NOT EXISTS foundry_agent_quinn  VARCHAR,
+    ADD COLUMN IF NOT EXISTS foundry_agent_luna   VARCHAR,
+    ADD COLUMN IF NOT EXISTS foundry_agent_morgan VARCHAR,
+    ADD COLUMN IF NOT EXISTS foundry_agent_riley  VARCHAR;

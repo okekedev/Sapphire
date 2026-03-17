@@ -92,20 +92,21 @@ async def self_update(
 ):
     """Agent calls this when it learns something worth persisting."""
     from sqlalchemy import text
-    import json
+
+    col = f"foundry_agent_{payload.agent_name.lower()}"
+    allowed = {"grace", "ivy", "quinn", "luna", "morgan", "riley"}
+    if payload.agent_name.lower() not in allowed:
+        raise HTTPException(status_code=400, detail=f"Unknown agent '{payload.agent_name}'")
 
     result = await db.execute(
-        text("SELECT foundry_agent_ids FROM businesses WHERE id = :id"),
+        text(f"SELECT {col} FROM businesses WHERE id = :id"),
         {"id": str(payload.business_id)},
     )
     row = result.fetchone()
     if not row or not row[0]:
-        raise HTTPException(status_code=404, detail="No Foundry agents found for this business")
+        raise HTTPException(status_code=404, detail=f"No Foundry agent found for '{payload.agent_name}'")
 
-    agent_ids = json.loads(row[0]) if isinstance(row[0], str) else row[0]
-    agent_id = agent_ids.get(payload.agent_name)
-    if not agent_id:
-        raise HTTPException(status_code=404, detail=f"Agent '{payload.agent_name}' not found")
+    agent_id = row[0]
 
     try:
         client = _get_foundry_client()
