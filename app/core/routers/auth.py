@@ -1,10 +1,12 @@
 """
-Authentication routes — registration, login, token refresh.
+Authentication routes — registration, login, token refresh, Azure AD SSO.
 """
 
 from datetime import datetime, timedelta, timezone
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,9 +18,19 @@ from app.core.schemas.auth import (
     TokenResponse,
 )
 from app.core.services.auth_service import AuthService
+from app.config import settings
 
 router = APIRouter(prefix="/auth")
 auth_service = AuthService()
+
+
+def _msal_app():
+    import msal
+    return msal.ConfidentialClientApplication(
+        settings.azure_ad_client_id,
+        authority=f"https://login.microsoftonline.com/{settings.azure_ad_tenant_id}",
+        client_credential=settings.azure_ad_client_secret,
+    )
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -58,6 +70,78 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
     tokens = auth_service.create_tokens(user_id=str(user.id))
     return tokens
+
+
+@router.get("/microsoft/login")
+async def microsoft_login():
+    """Return the Azure AD authorization URL. Frontend redirects the user there."""
+    if not settings.azure_ad_client_id or not settings.azure_ad_tenant_id:
+        raise HTTPException(status_code=503, detail="Azure AD not configured")
+
+    auth_url = _msal_app().get_authorization_request_url(
+        scopes=["User.Read"],
+        redirect_uri=settings.azure_ad_redirect_uri,
+        state="sapphire",
+    )
+    return {"auth_url": auth_url}
+
+
+@router.get("/microsoft/callback")
+async def microsoft_callback(
+    code: str,
+    state: str = "",
+    db: AsyncSession = Depends(get_db),
+):
+    """Azure AD redirects here after user authenticates."""
+    result = _msal_app().acquire_token_by_authorization_code(
+        code,
+        scopes=["User.Read"],
+        redirect_uri=settings.azure_ad_redirect_uri,
+    )
+    if "error" in result:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=result.get("error_description", "Azure AD authentication failed"),
+        )
+
+    # Validate group membership if a group ID is configured
+    if settings.azure_ad_group_id:
+        async with httpx.AsyncClient() as http:
+            r = await http.post(
+                "https://graph.microsoft.com/v1.0/me/checkMemberGroups",
+                headers={"Authorization": f"Bearer {result['access_token']}"},
+                json={"groupIds": [settings.azure_ad_group_id]},
+            )
+        if settings.azure_ad_group_id not in r.json().get("value", []):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: not a member of the Sapphire Users group",
+            )
+
+    # Get user info from ID token claims
+    claims = result.get("id_token_claims", {})
+    email = claims.get("preferred_username") or claims.get("email", "")
+    name = claims.get("name") or email
+
+    if not email:
+        raise HTTPException(status_code=400, detail="No email in Azure AD token claims")
+
+    # Get or create user
+    existing = await db.execute(select(User).where(User.email == email))
+    user = existing.scalar_one_or_none()
+    if not user:
+        user = User(email=email, password_hash="", full_name=name)
+        db.add(user)
+        await db.flush()
+
+    tokens = auth_service.create_tokens(user_id=str(user.id))
+
+    # Redirect to frontend — tokens in hash fragment (not logged by servers)
+    redirect = (
+        f"{settings.frontend_url}/auth/callback"
+        f"#access_token={tokens['access_token']}&refresh_token={tokens['refresh_token']}"
+    )
+    return RedirectResponse(url=redirect)
 
 
 @router.post("/refresh", response_model=TokenResponse)

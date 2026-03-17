@@ -1,4 +1,4 @@
-# CEO James — requirements (unpinned, install latest stable)
+# Sapphire — requirements (unpinned, install latest stable)
 # Lock versions after confirming compatibility: pip freeze > requirements.lock
 
 # --- Core Framework ---
@@ -42,6 +42,7 @@ pyngrok
 azure-identity
 azure-keyvault-secrets
 anthropic[azure]
+msal
 
 # --- Utilities ---
 python-dotenv

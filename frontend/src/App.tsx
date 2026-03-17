@@ -4,6 +4,7 @@ import { AppShell } from "@/shared/components/layout/app-shell";
 import { useTheme } from "@/shared/hooks/use-theme";
 import LoginPage from "@/shared/pages/login";
 import RegisterPage from "@/shared/pages/register";
+import AuthCallbackPage from "@/shared/pages/auth-callback";
 import MarketingPage from "@/marketing/pages/marketing";
 import AdminPage from "@/admin/pages/admin";
 import BillingPage from "@/finance/pages/billing";
@@ -35,6 +36,7 @@ export default function App() {
           {/* Public routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
           {/* Protected routes */}
           <Route element={<AppShell />}>

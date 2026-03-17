@@ -64,6 +64,17 @@ class Settings(BaseSettings):
     microsoft_client_secret: str = ""
     microsoft_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
 
+    # ── Azure AD (user authentication) ──
+    # App registration: "Sapphire" in your Azure AD tenant.
+    # Group: "Sapphire Users" — only members can sign in.
+    # Redirect URI to register: http://localhost:8000/api/v1/auth/microsoft/callback
+    azure_ad_tenant_id: str = ""
+    azure_ad_client_id: str = ""
+    azure_ad_client_secret: str = ""
+    azure_ad_group_id: str = ""  # Object ID of "Sapphire Users" group; empty = skip group check
+    azure_ad_redirect_uri: str = "http://localhost:8000/api/v1/auth/microsoft/callback"
+    frontend_url: str = "http://localhost:5173"
+
     # ── OAuth: Twitter/X (requires elevated access approval) ──
     twitter_client_id: str = ""
     twitter_client_secret: str = ""
@@ -166,6 +177,7 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
             "secret-key": "secret_key",
             "jwt-secret-key": "jwt_secret_key",
             "encryption-key": "encryption_key",
+            "azure-ad-client-secret": "azure_ad_client_secret",
         }
         for secret_name, attr in mappings.items():
             value = kv.get(secret_name)

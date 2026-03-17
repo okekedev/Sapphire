@@ -17,3 +17,8 @@ export async function refreshToken(refresh: string): Promise<TokenResponse> {
   });
   return res.data;
 }
+
+export async function getMicrosoftLoginUrl(): Promise<string> {
+  const res = await client.get<{ auth_url: string }>("/auth/microsoft/login");
+  return res.data.auth_url;
+}

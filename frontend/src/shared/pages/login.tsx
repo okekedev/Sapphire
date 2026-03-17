@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, AlertCircle } from "lucide-react";
 
 import { useAppStore } from "@/shared/stores/app-store";
-import { login } from "@/shared/api/auth";
+import { login, getMicrosoftLoginUrl } from "@/shared/api/auth";
 import { loginSchema, type LoginInput } from "@/shared/types/auth-schemas";
 
 import { AuthLayout } from "@/shared/components/auth/auth-layout";
@@ -18,6 +18,7 @@ export default function LoginPage() {
   const setTokens = useAppStore((s) => s.setTokens);
   const [apiError, setApiError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isMsLoading, setIsMsLoading] = useState(false);
 
   const {
     register: field,
@@ -43,31 +44,70 @@ export default function LoginPage() {
     }
   };
 
+  const onMicrosoftLogin = async () => {
+    setApiError("");
+    setIsMsLoading(true);
+    try {
+      const authUrl = await getMicrosoftLoginUrl();
+      window.location.href = authUrl;
+    } catch (err: any) {
+      setApiError("Could not reach authentication server");
+      setIsMsLoading(false);
+    }
+  };
+
   return (
     <AuthLayout>
       {/* Header */}
       <div className="text-center lg:text-left">
-        {/* Mobile-only branding */}
         <p className="mb-4 text-sm font-semibold tracking-wide text-primary lg:hidden">
-          WORKFORCE
+          SAPPHIRE
         </p>
         <h1 className="text-2xl font-bold sm:text-3xl">Welcome back</h1>
-        <p className="mt-2 text-muted-foreground">
-          Sign in to your account to continue
-        </p>
+        <p className="mt-2 text-muted-foreground">Sign in to continue</p>
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        {/* API error banner */}
-        {apiError && (
-          <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
-            <AlertCircle size={16} className="shrink-0" />
-            {apiError}
-          </div>
-        )}
+      {/* Error banner */}
+      {apiError && (
+        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+          <AlertCircle size={16} className="shrink-0" />
+          {apiError}
+        </div>
+      )}
 
-        {/* Email */}
+      {/* Microsoft SSO — primary */}
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full gap-2"
+        onClick={onMicrosoftLogin}
+        disabled={isMsLoading}
+      >
+        {isMsLoading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <svg viewBox="0 0 21 21" className="h-4 w-4" fill="none">
+            <rect x="1" y="1" width="9" height="9" fill="#F25022" />
+            <rect x="11" y="1" width="9" height="9" fill="#7FBA00" />
+            <rect x="1" y="11" width="9" height="9" fill="#00A4EF" />
+            <rect x="11" y="11" width="9" height="9" fill="#FFB900" />
+          </svg>
+        )}
+        Sign in with Microsoft
+      </Button>
+
+      {/* Divider */}
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-background px-2 text-muted-foreground">or</span>
+        </div>
+      </div>
+
+      {/* Email / password fallback */}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
         <div className="space-y-1.5">
           <label htmlFor="email" className="block text-sm font-medium">
             Email
@@ -87,20 +127,10 @@ export default function LoginPage() {
           )}
         </div>
 
-        {/* Password */}
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between">
-            <label htmlFor="password" className="block text-sm font-medium">
-              Password
-            </label>
-            <button
-              type="button"
-              className="text-xs text-primary hover:underline"
-              onClick={() => {}}
-            >
-              Forgot password?
-            </button>
-          </div>
+          <label htmlFor="password" className="block text-sm font-medium">
+            Password
+          </label>
           <PasswordInput
             id="password"
             autoComplete="current-password"
@@ -115,26 +145,17 @@ export default function LoginPage() {
           )}
         </div>
 
-        {/* Submit */}
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button type="submit" className="w-full" disabled={isLoading} variant="ghost">
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Signing in...
             </>
           ) : (
-            "Sign in"
+            "Sign in with email"
           )}
         </Button>
       </form>
-
-      {/* Switch to register */}
-      <p className="text-center text-sm text-muted-foreground">
-        Don&apos;t have an account?{" "}
-        <Link to="/register" className="font-medium text-primary hover:underline">
-          Create one
-        </Link>
-      </p>
     </AuthLayout>
   );
 }
