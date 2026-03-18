@@ -30,7 +30,7 @@ from app.core.routers import (
 from app.marketing.routers import contacts, tracking_routing, email, content
 from app.sales import routers as sales
 from app.finance.routers import payments, billing, reports, stripe_router
-from app.admin.routers import twilio, ngrok, whatsapp
+from app.admin.routers import twilio
 
 
 @asynccontextmanager
@@ -70,102 +70,8 @@ async def lifespan(app: FastAPI):
     from app.admin.services.twilio_sync import start_twilio_sync
     await start_twilio_sync(_scheduler)
 
-    # 4. Auto-reconnect ngrok tunnel if previously connected
-    try:
-        from app.admin.services.ngrok_service import ngrok_service
-        from app.database import async_session_factory
-        from sqlalchemy import select
-        from app.core.models.connected_account import ConnectedAccount
-
-        async with async_session_factory() as db:
-            result = await db.execute(
-                select(ConnectedAccount).where(
-                    ConnectedAccount.platform == "ngrok",
-                    ConnectedAccount.status == "active",
-                    ConnectedAccount.department_id == None,  # ngrok is shared, not department-scoped
-                )
-            )
-            ngrok_account = result.scalar_one_or_none()
-            if ngrok_account:
-                _logger.info("🔗 Found active ngrok connection — auto-starting tunnel...")
-                try:
-                    tunnel_result = await ngrok_service.start_tunnel(
-                        db, ngrok_account.business_id, port=8000
-                    )
-                    tunnel_url = tunnel_result["tunnel_url"]
-                    _logger.info(f"🔗 ngrok tunnel auto-started: {tunnel_url}")
-
-                    # Persist webhook URL to phone_settings (DB is source of truth)
-                    from app.admin.models import PhoneSettings
-                    ps_result = await db.execute(
-                        select(PhoneSettings).where(
-                            PhoneSettings.business_id == ngrok_account.business_id
-                        )
-                    )
-                    ps = ps_result.scalar_one_or_none()
-                    if ps:
-                        ps.webhook_base_url = tunnel_url
-                    else:
-                        db.add(PhoneSettings(
-                            business_id=ngrok_account.business_id,
-                            webhook_base_url=tunnel_url,
-                        ))
-
-                    # Auto-configure webhooks for all active phone lines (mainline + tracking)
-                    from app.marketing.models import BusinessPhoneLine
-                    from app.admin.services.twilio_service import twilio_service
-
-                    biz_id = ngrok_account.business_id
-                    voice_url = f"{tunnel_url}{settings.api_prefix}/twilio/voice?business_id={biz_id}"
-                    status_url = f"{tunnel_url}{settings.api_prefix}/twilio/call-status?business_id={biz_id}"
-
-                    tn_result = await db.execute(
-                        select(BusinessPhoneLine).where(
-                            BusinessPhoneLine.business_id == biz_id,
-                            BusinessPhoneLine.active == True,
-                        )
-                    )
-                    tracking_numbers = tn_result.scalars().all()
-
-                    # Auto-resolve any null SIDs by matching phone numbers from Twilio API
-                    null_sid_numbers = [tn for tn in tracking_numbers if not tn.twilio_number_sid]
-                    if null_sid_numbers:
-                        try:
-                            twilio_numbers = await twilio_service.list_phone_numbers(db, biz_id)
-                            sid_lookup = {n["phone_number"]: n["sid"] for n in twilio_numbers}
-                            for tn in null_sid_numbers:
-                                if tn.twilio_number in sid_lookup:
-                                    tn.twilio_number_sid = sid_lookup[tn.twilio_number]
-                                    _logger.info(f"Auto-resolved SID for {tn.twilio_number}: {tn.twilio_number_sid}")
-                        except Exception as e:
-                            _logger.warning(f"Failed to resolve null SIDs from Twilio API: {e}")
-
-                    for tn in tracking_numbers:
-                        if tn.twilio_number_sid:
-                            try:
-                                await twilio_service.configure_webhook(
-                                    db=db, business_id=biz_id,
-                                    number_sid=tn.twilio_number_sid,
-                                    voice_url=voice_url,
-                                    status_callback_url=status_url,
-                                )
-                                _logger.info(f"Configured webhook for {tn.twilio_number}")
-                            except Exception as e:
-                                _logger.warning(f"Failed to configure webhook for {tn.twilio_number}: {e}")
-
-                    await db.commit()
-                except Exception as e:
-                    _logger.warning(f"⚠️  ngrok auto-start failed (non-fatal): {e}")
-    except Exception as e:
-        _logger.warning(f"⚠️  ngrok startup check failed (non-fatal): {e}")
-
     yield
     # ── Shutdown ──
-    try:
-        from app.admin.services.ngrok_service import ngrok_service as _ngrok
-        await _ngrok.stop_tunnel()
-    except Exception:
-        pass
     if hasattr(app.state, "scheduler"):
         app.state.scheduler.shutdown(wait=False)
     from app.database import engine
@@ -218,6 +124,4 @@ app.include_router(reports.router, prefix=settings.api_prefix)
 
 # ── Administration ──
 app.include_router(twilio.router, prefix=settings.api_prefix)
-app.include_router(whatsapp.router, prefix=settings.api_prefix)
-app.include_router(ngrok.router, prefix=settings.api_prefix)
 
