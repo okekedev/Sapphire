@@ -28,7 +28,7 @@ from app.core.schemas.business import (
     CompanyProfileInput, CompanyProfileOut,
 )
 from app.core.services.auth_service import get_current_user_id
-from app.core.services.claude_cli_service import claude_cli, ClaudeCliError, ClaudeCliNotReady, ClaudeCliTokenExpired
+from app.core.services.anthropic_service import claude_cli, ClaudeCliError, ClaudeCliNotReady, ClaudeCliTokenExpired
 
 router = APIRouter(prefix="/businesses")
 

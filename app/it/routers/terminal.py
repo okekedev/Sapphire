@@ -28,7 +28,7 @@ from uuid import UUID
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 
 from app.database import async_session
-from app.core.services.claude_cli_service import claude_cli
+from app.core.services.anthropic_service import claude_cli
 
 logger = logging.getLogger(__name__)
 

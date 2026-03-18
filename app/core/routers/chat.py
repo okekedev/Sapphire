@@ -27,7 +27,7 @@ from app.core.models.business import Business
 from app.core.models.conversation import Conversation, ConversationMessage
 from app.core.models.organization import Employee
 from app.core.services.auth_service import get_current_user_id
-from app.core.services.claude_cli_service import claude_cli, ClaudeCliError, ClaudeCliNotReady, ClaudeCliTokenExpired
+from app.core.services.anthropic_service import claude_cli, ClaudeCliError, ClaudeCliNotReady, ClaudeCliTokenExpired
 
 logger = logging.getLogger(__name__)
 
@@ -167,7 +167,7 @@ async def send_chat_message(
     db.add(user_msg)
 
     # Build assistant's system prompt with business context
-    from app.core.services.claude_cli_service import build_profile_context
+    from app.core.services.anthropic_service import build_profile_context
     profile_content = build_profile_context(business) or None
 
     system_context = _build_assistant_context(business, profile_content)

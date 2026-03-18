@@ -126,9 +126,9 @@ class Settings(BaseSettings):
     # Users supply their own Account SID + Auth Token via the Connections page.
     # webhook_base_url lives in phone_settings table (per-business, DB is source of truth).
 
-    # ── AI Provider (CLI only — uses Claude Max subscription) ──
-    provider_mode: str = "cli"  # Only "cli" supported — uses `claude` CLI with Max subscription
-    claude_cli_timeout: int = 300  # Seconds before a CLI call times out
+    # ── AI Provider (Azure AI Foundry) ──
+    # Auth: DefaultAzureCredential (az login locally, Managed Identity in production).
+    foundry_timeout: int = 120  # Seconds before a Foundry call times out
 
     # ── Stripe (bring-your-own-account — stored per-business in connected_accounts) ──
     # Users supply their own Stripe Secret Key via the Connections page.

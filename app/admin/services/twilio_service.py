@@ -357,7 +357,7 @@ class TwilioService:
 
         # Try Claude-powered normalization via Ivy
         try:
-            from app.core.services.claude_cli_service import claude_cli
+            from app.core.services.anthropic_service import claude_cli
             from app.core.models.organization import Employee
             from sqlalchemy import select
             from sqlalchemy.ext.asyncio import AsyncSession

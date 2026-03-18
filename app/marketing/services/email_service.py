@@ -135,8 +135,9 @@ class EmailService:
         Generate an AI follow-up email draft based on conversation history.
         Uses Claude CLI for generation.
         """
-        from app.core.services.claude_cli_service import claude_cli
+        from app.core.services.anthropic_service import anthropic_service
 
+        system = "You write concise, natural follow-up emails for small businesses. Return only the email body — no subject line."
         prompt = (
             f"You are writing a follow-up email on behalf of {business_name}.\n"
             f"The recipient is {lead_name}.\n"
@@ -149,8 +150,7 @@ class EmailService:
         )
 
         try:
-            result = await claude_cli.run_prompt(prompt)
-            return result.get("response", "")
+            return await anthropic_service.chat(system_prompt=system, message=prompt)
         except Exception as e:
             logger.error(f"AI follow-up generation failed: {e}")
             return ""
@@ -164,8 +164,9 @@ class EmailService:
         Summarize an email/call thread using Claude.
         Returns a concise summary of the conversation.
         """
-        from app.core.services.claude_cli_service import claude_cli
+        from app.core.services.anthropic_service import anthropic_service
 
+        system = "You summarize conversation threads for small business CRM. Be concise and factual."
         prompt = (
             f"Summarize this conversation thread for {business_name}.\n"
             f"Include: key topics discussed, any quotes given, action items, "
@@ -175,8 +176,7 @@ class EmailService:
         )
 
         try:
-            result = await claude_cli.run_prompt(prompt)
-            return result.get("response", "")
+            return await anthropic_service.chat(system_prompt=system, message=prompt)
         except Exception as e:
             logger.error(f"Thread summarization failed: {e}")
             return ""

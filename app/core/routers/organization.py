@@ -24,7 +24,6 @@ from app.core.schemas.organization import (
     OrgChartNode,
 )
 from app.core.services.auth_service import get_current_user_id
-from app.core.services.claude_cli_service import claude_cli
 
 logger = logging.getLogger(__name__)
 
@@ -217,15 +216,6 @@ async def create_employee(
     db.add(emp)
     await db.flush()
 
-    # Write .md file for CLI compatibility
-    try:
-        claude_cli.write_employee_file(
-            department=dept.name,
-            file_stem=payload.file_stem,
-            content=payload.system_prompt,
-        )
-    except Exception as e:
-        logger.warning(f"Failed to write .md file for {payload.file_stem}: {e}")
 
     return EmployeeOut.model_validate(emp)
 
@@ -263,17 +253,6 @@ async def update_employee(
 
     await db.flush()
 
-    # Regenerate .md file if prompt or model changed
-    if "system_prompt" in update_data or "model_tier" in update_data:
-        try:
-            dept = await db.get(Department, emp.department_id)
-            claude_cli.write_employee_file(
-                department=dept.name if dept else "unknown",
-                file_stem=emp.file_stem,
-                content=emp.system_prompt,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to update .md file for {emp.file_stem}: {e}")
 
     return EmployeeOut.model_validate(emp)
 

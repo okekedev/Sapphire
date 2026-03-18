@@ -41,7 +41,7 @@ pyngrok
 # --- Azure ---
 azure-identity
 azure-keyvault-secrets
-anthropic[azure]
+azure-ai-projects
 msal
 
 # --- Utilities ---

@@ -138,7 +138,7 @@ class CallAnalysisService:
         call_context = "\n".join(context_parts)
 
         try:
-            from app.core.services.claude_cli_service import claude_cli
+            from app.core.services.anthropic_service import claude_cli
 
             prompt = f"""Analyze this inbound call and determine:
 1. Which department should handle it
@@ -322,7 +322,7 @@ ACTION: [suggested next action in one sentence]"""
         if not employee_id:
             return {"status": "error", "message": f"No employee mapped for department: {department}"}
 
-        from app.core.services.claude_cli_service import claude_cli
+        from app.core.services.anthropic_service import claude_cli
 
         task = f"""A call has been reviewed and routed to your department ({department}).
 

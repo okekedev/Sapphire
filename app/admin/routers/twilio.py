@@ -726,7 +726,7 @@ async def voice_gather_callback(
             f"If none match at all, respond with \"none\"."
         )
         try:
-            from app.core.services.claude_cli_service import claude_cli
+            from app.core.services.anthropic_service import claude_cli
             from app.core.models.organization import Employee
 
             # Use Grace (Receptionist) for routing — focused prompt, Haiku speed
@@ -1055,7 +1055,7 @@ async def _process_call_pipeline(
             call_summary = None
             if transcript or ivr_caller_name or ivr_reason:
                 try:
-                    from app.core.services.claude_cli_service import claude_cli
+                    from app.core.services.anthropic_service import claude_cli
                     call_context = (
                         f"Caller name: {ivr_caller_name or 'Unknown'}\n"
                         f"Reason for calling: {ivr_reason or 'Not stated'}\n"
@@ -1099,7 +1099,7 @@ async def _process_call_pipeline(
             follow_up_draft = None
 
             try:
-                from app.core.services.claude_cli_service import claude_cli
+                from app.core.services.anthropic_service import claude_cli
                 from app.core.models.organization import Employee
                 from app.core.models.business import Business as BusinessModel
 
@@ -1118,7 +1118,7 @@ async def _process_call_pipeline(
                     select(BusinessModel).where(BusinessModel.id == business_id)
                 )
                 biz = biz_result.scalar_one_or_none()
-                from app.core.services.claude_cli_service import build_profile_context
+                from app.core.services.anthropic_service import build_profile_context
                 profile_text = build_profile_context(biz) if biz else ""
 
                 riley_task = f"""A new inbound call just ended. Here is everything you know:

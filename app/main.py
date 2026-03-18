@@ -23,7 +23,7 @@ from app.config import settings
 
 # ── Core routers ──
 from app.core.routers import (
-    auth, businesses, chat, cli, health,
+    auth, businesses, chat, health,
     notifications, organization, platforms, agent_tools,
 )
 # ── Department routers ──
@@ -53,13 +53,13 @@ async def lifespan(app: FastAPI):
         ))
         _logger.info("✅ departments table: forward_number + enabled columns ensured")
 
-    # 1. Check Claude CLI readiness (non-blocking — logs warnings if not ready)
-    from app.core.services.claude_cli_service import claude_cli
-    cli_status = await claude_cli.startup_check()
-    if not cli_status["installed"]:
+    # 1. Check Foundry client readiness (non-blocking — logs warnings if not ready)
+    from app.core.services.anthropic_service import anthropic_service
+    foundry_status = await anthropic_service.startup_check()
+    if not foundry_status["ready"]:
         _logger.warning(
-            "⚠️  Claude CLI not installed — chat will fail until installed. "
-            f"{cli_status['message']}"
+            "⚠️  Azure AI Foundry not ready — chat will fail until configured. "
+            f"{foundry_status['message']}"
         )
 
     # 2. Start APScheduler + Twilio ↔ DB sync (every 15 min)
@@ -200,7 +200,6 @@ app.include_router(platforms.router, prefix=settings.api_prefix, tags=["Platform
 app.include_router(agent_tools.router, prefix=settings.api_prefix, tags=["Agent Tools"])
 app.include_router(chat.router, prefix=settings.api_prefix)
 app.include_router(notifications.router, prefix=settings.api_prefix)
-app.include_router(cli.router, prefix=settings.api_prefix)
 app.include_router(organization.router, prefix=settings.api_prefix)
 # ── Platform Tools (terminal, internal API proxy) ──
 app.include_router(terminal.router, prefix=settings.api_prefix)
