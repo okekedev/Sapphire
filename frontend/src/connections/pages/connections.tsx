@@ -60,10 +60,7 @@ const CONNECTABLE_PLATFORMS = [
   { key: "google_analytics", label: "Google Analytics", description: "GA4 traffic & conversions" },
   { key: "google_business_profile", label: "Google Business", description: "Local listings & reviews" },
   { key: "youtube", label: "YouTube", description: "Channel management & uploads" },
-  { key: "twitter", label: "Twitter/X", description: "Posts & analytics" },
   { key: "linkedin", label: "LinkedIn", description: "Company page & posts" },
-  { key: "tiktok", label: "TikTok", description: "Video publishing" },
-  { key: "pinterest", label: "Pinterest", description: "Pins & boards" },
   { key: "gmail", label: "Gmail", description: "Send & read emails" },
 ] as const;
 

@@ -87,26 +87,6 @@ PLATFORM_CONFIGS: dict[str, dict] = {
         "client_secret_setting": "meta_app_secret",
         "redirect_uri_setting": "meta_redirect_uri",
     },
-    # ── Twitter/X ──
-    "twitter": {
-        "auth_url": "https://twitter.com/i/oauth2/authorize",
-        "token_url": "https://api.twitter.com/2/oauth2/token",
-        "scopes": ["tweet.read", "tweet.write", "users.read", "offline.access"],
-        "supports_pkce": True,
-        "client_id_setting": "twitter_client_id",
-        "client_secret_setting": "twitter_client_secret",
-        "redirect_uri_setting": "twitter_redirect_uri",
-    },
-    # ── TikTok ──
-    "tiktok": {
-        "auth_url": "https://www.tiktok.com/v2/auth/authorize/",
-        "token_url": "https://open.tiktokapis.com/v2/oauth/token/",
-        "scopes": ["user.info.basic", "video.publish", "video.upload"],
-        "supports_pkce": True,
-        "client_id_setting": "tiktok_client_key",
-        "client_secret_setting": "tiktok_client_secret",
-        "redirect_uri_setting": "tiktok_redirect_uri",
-    },
     # ── LinkedIn ──
     "linkedin": {
         "auth_url": "https://www.linkedin.com/oauth/v2/authorization",
@@ -141,21 +121,7 @@ PLATFORM_CONFIGS: dict[str, dict] = {
         "client_secret_setting": "google_client_secret",
         "redirect_uri_setting": "google_redirect_uri",
     },
-    # ── Microsoft Outlook (send/read emails via Graph API) ──
-    "microsoft_outlook": {
-        "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-        "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-        "scopes": [
-            "Mail.Send",
-            "Mail.Read",
-            "offline_access",
-        ],
-        "supports_pkce": True,
-        "client_id_setting": "microsoft_client_id",
-        "client_secret_setting": "microsoft_client_secret",
-        "redirect_uri_setting": "microsoft_redirect_uri",
-    },
-    # ── Microsoft Bing (Webmaster Tools, Ads) ──
+    # ── Microsoft Bing Ads ──
     "bing": {
         "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
         "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -167,63 +133,6 @@ PLATFORM_CONFIGS: dict[str, dict] = {
         "client_id_setting": "microsoft_client_id",
         "client_secret_setting": "microsoft_client_secret",
         "redirect_uri_setting": "microsoft_redirect_uri",
-    },
-    # ── Snapchat (requires Snap Kit app approval) ──
-    "snapchat": {
-        "auth_url": "https://accounts.snapchat.com/accounts/oauth2/auth",
-        "token_url": "https://accounts.snapchat.com/accounts/oauth2/token",
-        "scopes": [
-            "snapchat-marketing-api",
-        ],
-        "supports_pkce": False,
-        "client_id_setting": "snapchat_client_id",
-        "client_secret_setting": "snapchat_client_secret",
-        "redirect_uri_setting": "snapchat_redirect_uri",
-    },
-    # ── Reddit (requires app approval for ads/moderation scopes) ──
-    "reddit": {
-        "auth_url": "https://www.reddit.com/api/v1/authorize",
-        "token_url": "https://www.reddit.com/api/v1/access_token",
-        "scopes": [
-            "identity",
-            "read",
-            "submit",
-            "edit",
-        ],
-        "supports_pkce": False,
-        "client_id_setting": "reddit_client_id",
-        "client_secret_setting": "reddit_client_secret",
-        "redirect_uri_setting": "reddit_redirect_uri",
-    },
-    # ── Nextdoor ──
-    # Nextdoor Business API — requires partner approval
-    # Provides access to business pages, posts, and neighborhood-level marketing
-    "nextdoor": {
-        "auth_url": "https://auth.nextdoor.com/v2/authorize",
-        "token_url": "https://auth.nextdoor.com/v2/token",
-        "scopes": ["openid", "profile", "post:write", "post:read"],
-        "supports_pkce": True,
-        "client_id_setting": "nextdoor_client_id",
-        "client_secret_setting": "nextdoor_client_secret",
-        "redirect_uri_setting": "nextdoor_redirect_uri",
-    },
-    # ── Pinterest ──
-    # Pinterest API v5 — requires a Pinterest app with "Ads" and "Organic content" access
-    # Scopes: boards:read, pins:read, pins:write, user_accounts:read
-    "pinterest": {
-        "auth_url": "https://www.pinterest.com/oauth/",
-        "token_url": "https://api.pinterest.com/v5/oauth/token",
-        "scopes": [
-            "boards:read",
-            "boards:write",
-            "pins:read",
-            "pins:write",
-            "user_accounts:read",
-        ],
-        "supports_pkce": True,
-        "client_id_setting": "pinterest_client_id",
-        "client_secret_setting": "pinterest_client_secret",
-        "redirect_uri_setting": "pinterest_redirect_uri",
     },
 }
 

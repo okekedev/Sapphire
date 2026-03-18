@@ -76,37 +76,10 @@ class Settings(BaseSettings):
     azure_ad_redirect_uri: str = "http://localhost:8000/api/v1/auth/microsoft/callback"
     frontend_url: str = "http://localhost:5173"
 
-    # ── OAuth: Twitter/X (requires elevated access approval) ──
-    twitter_client_id: str = ""
-    twitter_client_secret: str = ""
-    twitter_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
-
-    # ── OAuth: TikTok (requires app review approval) ──
-    tiktok_client_key: str = ""
-    tiktok_client_secret: str = ""
-    tiktok_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
-
-    # ── OAuth: LinkedIn (requires Marketing Developer Platform approval) ──
+    # ── OAuth: LinkedIn ──
     linkedin_client_id: str = ""
     linkedin_client_secret: str = ""
     linkedin_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
-
-    # ── OAuth: Snapchat (requires Snap Kit app approval) ──
-    snapchat_client_id: str = ""
-    snapchat_client_secret: str = ""
-    snapchat_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
-
-    # ── OAuth: Reddit (requires app approval for ads/moderation scopes) ──
-    reddit_client_id: str = ""
-    reddit_client_secret: str = ""
-    reddit_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
-
-    # ── OAuth: Pinterest ──
-    # Requires a Pinterest Developer app with "Ads" access + "Organic content" access
-    # Scopes: boards:read, boards:write, pins:read, pins:write, user_accounts:read
-    pinterest_client_id: str = ""
-    pinterest_client_secret: str = ""
-    pinterest_redirect_uri: str = "http://localhost:8000/api/v1/platforms/callback/pinterest"
 
     # ── API Key: Yelp Fusion (pending approval) ──
     yelp_api_key: str = ""

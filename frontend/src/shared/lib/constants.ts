@@ -19,43 +19,25 @@ export const OAUTH_PLATFORMS = [
   "google",
   "meta",
   "microsoft",
-  "twitter",
-  "tiktok",
   "linkedin",
-  "snapchat",
-  "reddit",
   "yelp",
 ] as const;
-
-/** CLI tools connected via one-time login on the server */
-export const CLI_PLATFORMS = ["claude", "github", "azure"] as const;
 
 export const PLATFORM_LABELS: Record<string, string> = {
   // OAuth — social & marketing
   google: "Google",
-  google_adsense: "Google AdSense",
-  google_trends: "Google Trends",
-  google_business: "Google Business",
+  google_business_profile: "Google Business",
   google_analytics: "Google Analytics",
   google_search_console: "Search Console",
   youtube: "YouTube",
+  gmail: "Gmail",
   meta: "Meta",
   facebook: "Facebook",
   instagram: "Instagram",
-  messenger: "Messenger",
   microsoft: "Microsoft",
-  bing: "Bing Webmaster",
-  bing_ads: "Bing Ads",
-  twitter: "Twitter/X",
-  tiktok: "TikTok",
+  bing: "Bing Ads",
   linkedin: "LinkedIn",
-  snapchat: "Snapchat",
-  reddit: "Reddit",
   yelp: "Yelp",
-  // CLI — dev & infra
-  claude: "Claude",
-  github: "GitHub",
-  azure: "Azure",
   // SEO tools (API key based)
   ahrefs: "Ahrefs",
   semrush: "SEMrush",
@@ -67,10 +49,6 @@ export const PLATFORM_STATUS: Record<string, "live" | "pending" | "needs_approva
   google: "live",
   meta: "live",
   microsoft: "live",
-  twitter: "needs_approval",
-  tiktok: "needs_approval",
   linkedin: "needs_approval",
-  snapchat: "needs_approval",
-  reddit: "needs_approval",
   yelp: "pending",
 };
