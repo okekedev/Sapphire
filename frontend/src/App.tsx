@@ -13,7 +13,6 @@ import SalesPage from "@/sales/pages/sales";
 import OperationsPage from "@/operations/pages/operations";
 
 import DashboardPage from "@/dashboard/pages/dashboard";
-import ITPage from "@/it/pages/it";
 
 
 const queryClient = new QueryClient({
@@ -42,7 +41,6 @@ export default function App() {
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/admin" element={<AdminPage />} />
-            <Route path="/it" element={<ITPage />} />
             <Route path="/marketing/reports" element={<ReportsPage />} />
             <Route path="/marketing/*" element={<MarketingPage />} />
             <Route path="/sales" element={<SalesPage />} />

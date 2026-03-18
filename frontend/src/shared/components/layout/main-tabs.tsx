@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, PhoneForwarded, DollarSign, Handshake, Briefcase, Settings, Monitor } from "lucide-react";
+import { Home, PhoneForwarded, DollarSign, Handshake, Briefcase, Settings } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useAppStore } from "@/shared/stores/app-store";
 
@@ -15,7 +15,6 @@ const CORE_TABS = [
 /** Utility / extra tabs — not part of the main workflow */
 const EXTRA_TABS = [
   { to: "/marketing",    icon: PhoneForwarded,   label: "Marketing" },
-  { to: "/it",           icon: Monitor,          label: "IT" },
 ];
 
 const ALL_TABS = [...CORE_TABS, ...EXTRA_TABS];

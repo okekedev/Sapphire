@@ -31,7 +31,6 @@ from app.marketing.routers import contacts, tracking_routing, email, content
 from app.sales import routers as sales
 from app.finance.routers import payments, billing, reports, stripe_router
 from app.admin.routers import twilio, ngrok, whatsapp
-from app.it.routers import internal_tools, terminal
 
 
 @asynccontextmanager
@@ -201,10 +200,6 @@ app.include_router(agent_tools.router, prefix=settings.api_prefix, tags=["Agent 
 app.include_router(chat.router, prefix=settings.api_prefix)
 app.include_router(notifications.router, prefix=settings.api_prefix)
 app.include_router(organization.router, prefix=settings.api_prefix)
-# ── Platform Tools (terminal, internal API proxy) ──
-app.include_router(terminal.router, prefix=settings.api_prefix)
-app.include_router(internal_tools.router, prefix=settings.api_prefix)
-
 # ── Marketing ──
 app.include_router(contacts.router, prefix=settings.api_prefix)
 app.include_router(contacts.phone_lines_router, prefix=settings.api_prefix)
