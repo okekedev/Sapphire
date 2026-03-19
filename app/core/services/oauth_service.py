@@ -26,57 +26,31 @@ from app.core.services.encryption_service import EncryptionService
 # Platform OAuth configurations
 # ---------------------------------------------------------------------------
 
-GOOGLE_SCOPES = {
-    "google_search_console": [
-        "https://www.googleapis.com/auth/webmasters.readonly",
-    ],
-    "google_analytics": [
-        "https://www.googleapis.com/auth/analytics.readonly",
-    ],
-    "google_business_profile": [
-        "https://www.googleapis.com/auth/business.manage",
-    ],
-    "youtube": [
-        "https://www.googleapis.com/auth/youtube.upload",
-        "https://www.googleapis.com/auth/youtube",
-    ],
-}
-
 PLATFORM_CONFIGS: dict[str, dict] = {
-    # ── Google platforms (shared project, separate scopes) ──
-    "google_search_console": {
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": GOOGLE_SCOPES["google_search_console"],
-        "supports_pkce": True,
-        "client_id_setting": "google_client_id",
-        "client_secret_setting": "google_client_secret",
-        "redirect_uri_setting": "google_redirect_uri",
-    },
-    "google_analytics": {
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": GOOGLE_SCOPES["google_analytics"],
-        "supports_pkce": True,
-        "client_id_setting": "google_client_id",
-        "client_secret_setting": "google_client_secret",
-        "redirect_uri_setting": "google_redirect_uri",
-    },
+    # ── Google Business Profile ──
     "google_business_profile": {
         "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": GOOGLE_SCOPES["google_business_profile"],
+        "scopes": ["https://www.googleapis.com/auth/business.manage"],
         "supports_pkce": True,
         "client_id_setting": "google_client_id",
         "client_secret_setting": "google_client_secret",
         "redirect_uri_setting": "google_redirect_uri",
     },
-    # ── Meta ──
-    # Covers: Facebook Pages, Instagram, Messenger DMs, Ads
-    # App: "SEO James Pro" (Business type) — App ID: 1449449336687986
-    # Uses Facebook Login for Business with a Login Configuration instead of scopes.
+    # ── Google Ads ──
+    "google_ads": {
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": ["https://www.googleapis.com/auth/adwords"],
+        "supports_pkce": True,
+        "client_id_setting": "google_client_id",
+        "client_secret_setting": "google_client_secret",
+        "redirect_uri_setting": "google_redirect_uri",
+    },
+    # ── Meta (Facebook Pages, Instagram, Ads) ──
+    # App: "SEO James Pro" — App ID: 1449449336687986
+    # Uses Facebook Login for Business with Login Configuration instead of scopes.
     # Config "SEO James User" (User access token) — ID: 1494948712209393
-    # Config "SEO James Pages" (System-user token) — ID: 1193673096089419
     "facebook": {
         "auth_url": "https://www.facebook.com/v21.0/dialog/oauth",
         "token_url": "https://graph.facebook.com/v21.0/oauth/access_token",
@@ -86,6 +60,19 @@ PLATFORM_CONFIGS: dict[str, dict] = {
         "client_id_setting": "meta_app_id",
         "client_secret_setting": "meta_app_secret",
         "redirect_uri_setting": "meta_redirect_uri",
+    },
+    # ── Microsoft Bing Ads ──
+    "bing": {
+        "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        "scopes": [
+            "https://ads.microsoft.com/msads.manage",
+            "offline_access",
+        ],
+        "supports_pkce": True,
+        "client_id_setting": "microsoft_client_id",
+        "client_secret_setting": "microsoft_client_secret",
+        "redirect_uri_setting": "microsoft_redirect_uri",
     },
     # ── LinkedIn ──
     "linkedin": {
@@ -97,49 +84,9 @@ PLATFORM_CONFIGS: dict[str, dict] = {
         "client_secret_setting": "linkedin_client_secret",
         "redirect_uri_setting": "linkedin_redirect_uri",
     },
-    # ── YouTube (uses Google OAuth with YouTube scopes) ──
-    "youtube": {
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": GOOGLE_SCOPES["youtube"],
-        "supports_pkce": True,
-        "client_id_setting": "google_client_id",
-        "client_secret_setting": "google_client_secret",
-        "redirect_uri_setting": "google_redirect_uri",
-    },
-    # ── Gmail (send/read emails from user's Gmail account) ──
-    "gmail": {
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": [
-            "https://www.googleapis.com/auth/gmail.send",
-            "https://www.googleapis.com/auth/gmail.readonly",
-            "https://www.googleapis.com/auth/gmail.modify",
-        ],
-        "supports_pkce": True,
-        "client_id_setting": "google_client_id",
-        "client_secret_setting": "google_client_secret",
-        "redirect_uri_setting": "google_redirect_uri",
-    },
-    # ── Microsoft Bing Ads ──
-    "bing": {
-        "auth_url": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-        "token_url": "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-        "scopes": [
-            "https://api.bing.com/.default",
-            "offline_access",
-        ],
-        "supports_pkce": True,
-        "client_id_setting": "microsoft_client_id",
-        "client_secret_setting": "microsoft_client_secret",
-        "redirect_uri_setting": "microsoft_redirect_uri",
-    },
 }
 
-# Platforms that use API keys rather than OAuth
-API_KEY_PLATFORMS = {"ahrefs", "semrush", "serpapi", "yelp"}
-
-SUPPORTED_PLATFORMS = set(PLATFORM_CONFIGS.keys()) | API_KEY_PLATFORMS
+SUPPORTED_PLATFORMS = set(PLATFORM_CONFIGS.keys())
 
 
 class OAuthService:
@@ -448,59 +395,7 @@ class OAuthService:
         return creds["access_token"]
 
     # ------------------------------------------------------------------
-    # 8. Store API key (for non-OAuth platforms)
-    # ------------------------------------------------------------------
-
-    async def store_api_key(
-        self,
-        db: AsyncSession,
-        business_id: UUID,
-        platform: str,
-        api_key: str,
-        department_id: UUID | None = None,
-    ) -> ConnectedAccount:
-        """Encrypt and store an API key for platforms like Ahrefs, SEMrush.
-
-        Args:
-            db: Database session
-            business_id: Business ID
-            platform: Platform name
-            api_key: The API key to store
-            department_id: Optional department ID (NULL = shared/business-wide)
-        """
-        if platform not in API_KEY_PLATFORMS:
-            raise ValueError(f"{platform} does not use API key auth")
-
-        encrypted = self.encryption.encrypt(json.dumps({"api_key": api_key}))
-
-        stmt = select(ConnectedAccount).where(
-            ConnectedAccount.business_id == business_id,
-            ConnectedAccount.platform == platform,
-            ConnectedAccount.department_id == department_id,
-        )
-        result = await db.execute(stmt)
-        account = result.scalar_one_or_none()
-
-        if account:
-            account.encrypted_credentials = encrypted
-            account.status = "active"
-            account.auth_method = "api_key"
-        else:
-            account = ConnectedAccount(
-                business_id=business_id,
-                platform=platform,
-                department_id=department_id,
-                auth_method="api_key",
-                encrypted_credentials=encrypted,
-                status="active",
-            )
-            db.add(account)
-
-        await db.flush()
-        return account
-
-    # ------------------------------------------------------------------
-    # 9. Disconnect a platform
+    # 8. Disconnect a platform
     # ------------------------------------------------------------------
 
     async def disconnect(

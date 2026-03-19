@@ -35,31 +35,19 @@ class Settings(BaseSettings):
     # ── Encryption ──
     encryption_key: str = "change-me"
 
-    # ── OAuth: Google ──
-    # Covers: AdSense, Trends, Business Profile, YouTube, Analytics,
-    #         Search Console, Ads — all under one Google OAuth consent screen
+    # ── OAuth: Google (Business Profile + Ads) ──
     # Client ID: 501086967643-a96jcc6l0co2a0klqcc2241s14p6qv6s.apps.googleusercontent.com
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
 
-    # ── OAuth: Meta ──
-    # Covers: Facebook Pages, Instagram, Messenger DMs, Ads
-    # App: "SEO James Pro" (Business type) — App ID: 1449449336687986
-    # Instagram App: SEO James Pro-IG — ID: 2237350143463367
-    # Business Portfolio: Okeke LLC (ID: 1559764275248518)
-    # Facebook Page: Okeke LLC (ID: 1003866996143356)
-    # Old Business Portfolio: Falls Tech Solutions (ID: 393867682122027)
-    # Permissions (Standard access): pages_manage_posts, pages_messaging,
-    #   pages_read_engagement, instagram_basic, instagram_manage_insights,
-    #   pages_manage_metadata, pages_show_list, read_insights
-    # Old Consumer app (deprecated): 26076940461942180
+    # ── OAuth: Meta (Facebook Pages, Instagram, Ads) ──
+    # App: "SEO James Pro" — App ID: 1449449336687986
     meta_app_id: str = ""
     meta_app_secret: str = ""
     meta_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
 
-    # ── OAuth: Microsoft ──
-    # Covers: Bing Webmaster Tools, Bing Ads, Microsoft Advertising
+    # ── OAuth: Microsoft (Bing Ads) ──
     microsoft_client_id: str = ""
     microsoft_client_secret: str = ""
     microsoft_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
@@ -80,9 +68,6 @@ class Settings(BaseSettings):
     linkedin_client_id: str = ""
     linkedin_client_secret: str = ""
     linkedin_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
-
-    # ── API Key: Yelp Fusion (pending approval) ──
-    yelp_api_key: str = ""
 
     # ── Email Delivery ──
     email_provider: str = "log"  # "sendgrid" | "smtp" | "log" (dev mode — prints to console)

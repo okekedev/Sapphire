@@ -16,39 +16,27 @@ export const STATUS_COLORS: Record<string, string> = {
 
 /** Platforms connected via OAuth (user-initiated per business) */
 export const OAUTH_PLATFORMS = [
-  "google",
-  "meta",
-  "microsoft",
+  "google_business_profile",
+  "google_ads",
+  "facebook",
+  "bing",
   "linkedin",
-  "yelp",
 ] as const;
 
 export const PLATFORM_LABELS: Record<string, string> = {
-  // OAuth — social & marketing
-  google: "Google",
   google_business_profile: "Google Business",
-  google_analytics: "Google Analytics",
-  google_search_console: "Search Console",
-  youtube: "YouTube",
-  gmail: "Gmail",
-  meta: "Meta",
-  facebook: "Facebook",
+  google_ads: "Google Ads",
+  facebook: "Meta (FB + IG)",
   instagram: "Instagram",
-  microsoft: "Microsoft",
   bing: "Bing Ads",
   linkedin: "LinkedIn",
-  yelp: "Yelp",
-  // SEO tools (API key based)
-  ahrefs: "Ahrefs",
-  semrush: "SEMrush",
-  serpapi: "SerpAPI",
 };
 
 /** Approval status for each OAuth platform */
 export const PLATFORM_STATUS: Record<string, "live" | "pending" | "needs_approval"> = {
-  google: "live",
-  meta: "live",
-  microsoft: "live",
+  google_business_profile: "live",
+  google_ads: "live",
+  facebook: "live",
+  bing: "live",
   linkedin: "needs_approval",
-  yelp: "pending",
 };
