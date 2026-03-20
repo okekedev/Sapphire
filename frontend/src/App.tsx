@@ -11,6 +11,7 @@ import BillingPage from "@/finance/pages/billing";
 import ReportsPage from "@/finance/pages/reports";
 import SalesPage from "@/sales/pages/sales";
 import OperationsPage from "@/operations/pages/operations";
+import ConnectionsPage from "@/connections/pages/connections";
 
 import DashboardPage from "@/dashboard/pages/dashboard";
 
@@ -46,7 +47,8 @@ export default function App() {
             <Route path="/sales" element={<SalesPage />} />
             <Route path="/operations" element={<OperationsPage />} />
             <Route path="/billing" element={<BillingPage />} />
-
+            <Route path="/finance" element={<BillingPage />} />
+            <Route path="/connections" element={<ConnectionsPage />} />
           </Route>
 
           {/* Catch-all */}
