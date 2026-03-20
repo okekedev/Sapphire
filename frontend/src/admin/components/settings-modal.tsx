@@ -119,6 +119,10 @@ export function SettingsModal({ isOpen, onClose, businessId, mainlineNumber }: S
         department_id: row.department_id!,
         forward_number: row.forward_number || null,
         enabled: row.enabled,
+        sms_enabled: false,
+        whatsapp_enabled: false,
+        whatsapp_sender_sid: null,
+        whatsapp_sender_status: "none",
       }));
 
     await updateMutation.mutateAsync({

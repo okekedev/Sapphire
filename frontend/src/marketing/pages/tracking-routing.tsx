@@ -650,7 +650,7 @@ export default function TrackingRoutingPage() {
                           </div>
                         </td>
                         <td className="px-3 py-2.5">
-                          <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${getCampaignColor(tn.channel, tn.campaign_name)}`}>
+                          <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${getCampaignColor(tn.channel, tn.campaign_name ?? null)}`}>
                             {tn.campaign_name}
                           </span>
                         </td>

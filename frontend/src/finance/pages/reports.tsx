@@ -198,7 +198,7 @@ export default function ReportsPage() {
                     <LabelList
                       dataKey="total"
                       position="top"
-                      formatter={(val: number) => val || ""}
+                      formatter={(val: unknown) => (val ? String(val) : "")}
                       style={{ fontSize: 13, fontWeight: 700, fill: "hsl(var(--foreground))" }}
                     />
                   </Bar>

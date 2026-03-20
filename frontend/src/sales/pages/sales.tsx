@@ -737,7 +737,6 @@ function ChatSection({
 function ProspectCard({
   prospect,
   onQualify,
-  onDiscuss,
   isPending,
 }: {
   prospect: ProspectItem;

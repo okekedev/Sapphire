@@ -76,7 +76,7 @@ export function NotificationBell() {
 
   const handleMarkRead = async (id: string) => {
     try {
-      await markNotificationRead(id);
+      await markNotificationRead(businessId, id);
       setItems((prev) =>
         prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)),
       );
