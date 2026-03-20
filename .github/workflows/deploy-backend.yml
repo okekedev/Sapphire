@@ -43,6 +43,12 @@ jobs:
 
       - name: Deploy to Container Apps
         run: |
+          az containerapp registry set \
+            --name ca-sapphire-prod \
+            --resource-group rg-sapphire-prod \
+            --server ghcr.io \
+            --username ${{ github.repository_owner }} \
+            --password ${{ secrets.GHCR_PAT }}
           az containerapp update \
             --name ca-sapphire-prod \
             --resource-group rg-sapphire-prod \
