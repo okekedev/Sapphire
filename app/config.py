@@ -125,7 +125,9 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
     Secret names map directly to setting names (underscores → hyphens).
 
     Secrets managed in Key Vault:
-      database-url, secret-key, jwt-secret-key, encryption-key
+      database-url, secret-key, jwt-secret-key, encryption-key,
+      foundry-agent-ids, google-client-id/secret, microsoft-client-id/secret,
+      meta-app-id/secret, linkedin-client-id/secret
     """
     if not s.azure_keyvault_url:
         return s
@@ -141,6 +143,14 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
             "jwt-secret-key": "jwt_secret_key",
             "encryption-key": "encryption_key",
             "foundry-agent-ids": "foundry_agent_ids",
+            "google-client-id": "google_client_id",
+            "google-client-secret": "google_client_secret",
+            "microsoft-client-id": "microsoft_client_id",
+            "microsoft-client-secret": "microsoft_client_secret",
+            "meta-app-id": "meta_app_id",
+            "meta-app-secret": "meta_app_secret",
+            "linkedin-client-id": "linkedin_client_id",
+            "linkedin-client-secret": "linkedin_client_secret",
         }
         for secret_name, attr in mappings.items():
             value = kv.get(secret_name)
