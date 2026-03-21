@@ -151,6 +151,8 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
             "meta-app-secret": "meta_app_secret",
             "linkedin-client-id": "linkedin_client_id",
             "linkedin-client-secret": "linkedin_client_secret",
+            "azure-ad-client-id": "azure_ad_client_id",
+            "azure-ad-client-secret": "azure_ad_client_secret",
         }
         for secret_name, attr in mappings.items():
             value = kv.get(secret_name)
