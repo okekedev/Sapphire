@@ -1,48 +1,20 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, AlertCircle } from "lucide-react";
 
 import { useAppStore } from "@/shared/stores/app-store";
-import { login, getMicrosoftLoginUrl } from "@/shared/api/auth";
-import { loginSchema, type LoginInput } from "@/shared/types/auth-schemas";
+import { getMicrosoftLoginUrl } from "@/shared/api/auth";
 
 import { AuthLayout } from "@/shared/components/auth/auth-layout";
 import { Button } from "@/shared/components/ui/button";
-import { Input } from "@/shared/components/ui/input";
-import { PasswordInput } from "@/shared/components/ui/password-input";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const setTokens = useAppStore((s) => s.setTokens);
   const [apiError, setApiError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [isMsLoading, setIsMsLoading] = useState(false);
 
-  const {
-    register: field,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginInput>({
-    resolver: zodResolver(loginSchema),
-    mode: "onBlur",
-  });
-
-  const onSubmit = async (data: LoginInput) => {
-    setApiError("");
-    setIsLoading(true);
-    try {
-      const res = await login(data);
-      setTokens(res.access_token, res.refresh_token);
-      navigate("/dashboard");
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail;
-      setApiError(detail || "Invalid email or password");
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  // suppress unused warning — navigate kept for future post-login redirect use
+  void navigate;
 
   const onMicrosoftLogin = async () => {
     setApiError("");
@@ -50,7 +22,7 @@ export default function LoginPage() {
     try {
       const authUrl = await getMicrosoftLoginUrl();
       window.location.href = authUrl;
-    } catch (err: any) {
+    } catch {
       setApiError("Could not reach authentication server");
       setIsMsLoading(false);
     }
@@ -75,7 +47,7 @@ export default function LoginPage() {
         </div>
       )}
 
-      {/* Microsoft SSO — primary */}
+      {/* Microsoft SSO — only sign-in method */}
       <Button
         type="button"
         variant="outline"
@@ -95,67 +67,6 @@ export default function LoginPage() {
         )}
         Sign in with Microsoft
       </Button>
-
-      {/* Divider */}
-      <div className="relative">
-        <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
-        </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">or</span>
-        </div>
-      </div>
-
-      {/* Email / password fallback */}
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="space-y-1.5">
-          <label htmlFor="email" className="block text-sm font-medium">
-            Email
-          </label>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            {...field("email")}
-          />
-          {errors.email && (
-            <p className="flex items-center gap-1 text-xs text-destructive">
-              <AlertCircle size={12} />
-              {errors.email.message}
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <label htmlFor="password" className="block text-sm font-medium">
-            Password
-          </label>
-          <PasswordInput
-            id="password"
-            autoComplete="current-password"
-            placeholder="••••••••"
-            {...field("password")}
-          />
-          {errors.password && (
-            <p className="flex items-center gap-1 text-xs text-destructive">
-              <AlertCircle size={12} />
-              {errors.password.message}
-            </p>
-          )}
-        </div>
-
-        <Button type="submit" className="w-full" disabled={isLoading} variant="ghost">
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Signing in...
-            </>
-          ) : (
-            "Sign in with email"
-          )}
-        </Button>
-      </form>
     </AuthLayout>
   );
 }
