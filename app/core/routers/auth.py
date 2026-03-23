@@ -5,7 +5,6 @@ Authentication routes — registration, login, token refresh, Azure AD SSO.
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from azure.identity import DefaultAzureCredential
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
@@ -26,25 +25,13 @@ router = APIRouter(prefix="/auth")
 auth_service = AuthService()
 
 
-_credential = DefaultAzureCredential()  # reused across requests — handles token caching
-
-
 def _msal_app():
-    """MSAL app using DefaultAzureCredential as client assertion.
-
-    No client secret. In production, the Container App's Managed Identity
-    (id-sapphire-prod) is a registered federated credential on the Sapphire
-    app registration. Locally, the az login user is registered the same way.
-    """
+    """MSAL app using client secret loaded from Key Vault via System-Assigned MI."""
     import msal
     return msal.ConfidentialClientApplication(
         settings.azure_ad_client_id,
         authority=f"https://login.microsoftonline.com/{settings.azure_ad_tenant_id}",
-        client_credential={
-            "client_assertion": lambda: _credential.get_token(
-                "api://AzureADTokenExchange"
-            ).token
-        },
+        client_credential=settings.azure_ad_client_secret,
     )
 
 
