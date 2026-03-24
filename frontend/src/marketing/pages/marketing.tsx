@@ -21,6 +21,7 @@ import {
   XCircle,
   Mail,
   Sparkles,
+  UserPlus,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useAppStore } from "@/shared/stores/app-store";
@@ -42,7 +43,7 @@ import {
   type MediaFile,
   type ContentPost,
 } from "@/marketing/api/content";
-import { listContacts, type Contact, type ContactStatus } from "@/marketing/api/contacts";
+import { listContacts, createContact, type Contact, type ContactStatus } from "@/marketing/api/contacts";
 import { sendEmail, generateAIFollowup, getEmailThread } from "@/marketing/api/email";
 
 // ── Brand SVG Icons ──
@@ -796,6 +797,15 @@ function ChatSection({
 
 // ── Outreach Section ──
 
+function getBirthdayInfo(birthday: string | null): { label: string; isThisMonth: boolean } {
+  if (!birthday) return { label: "", isThisMonth: false };
+  const [, month, day] = birthday.split("-").map(Number);
+  const now = new Date();
+  const isThisMonth = month === now.getMonth() + 1;
+  const label = new Date(2000, month - 1, day).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return { label, isThisMonth };
+}
+
 const OCCASIONS = [
   { key: "birthday",      label: "🎂 Birthday" },
   { key: "christmas",     label: "🎄 Christmas" },
@@ -819,6 +829,12 @@ function OutreachSection({ businessId }: { businessId: string }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sendSuccess, setSendSuccess] = useState(false);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [newBirthday, setNewBirthday] = useState("");
+  const [newStatus, setNewStatus] = useState<ContactStatus>("prospect");
 
   const { data, isLoading } = useQuery({
     queryKey: ["contacts-outreach", businessId, statusFilter, search],
@@ -864,6 +880,28 @@ function OutreachSection({ businessId }: { businessId: string }) {
     },
   });
 
+  const addMut = useMutation({
+    mutationFn: () =>
+      createContact(businessId, {
+        full_name: newName.trim() || undefined,
+        email: newEmail.trim() || undefined,
+        phone: newPhone.trim() || undefined,
+        birthday: newBirthday || undefined,
+        status: newStatus,
+        source_channel: "manual",
+      }),
+    onSuccess: (contact) => {
+      queryClient.invalidateQueries({ queryKey: ["contacts-outreach"] });
+      setShowAddForm(false);
+      setNewName("");
+      setNewEmail("");
+      setNewPhone("");
+      setNewBirthday("");
+      setNewStatus("prospect");
+      setSelectedContact(contact);
+    },
+  });
+
   const contacts = (data?.contacts ?? []).filter((c) => c.email);
 
   return (
@@ -899,7 +937,94 @@ function OutreachSection({ businessId }: { businessId: string }) {
               </button>
             ),
           )}
+          <button
+            type="button"
+            onClick={() => setShowAddForm((v) => !v)}
+            className="ml-auto flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50"
+          >
+            <UserPlus size={12} />
+            Add Contact
+          </button>
         </div>
+
+        {/* Inline add contact form */}
+        {showAddForm && (
+          <div className="rounded-lg border border-border bg-muted/20 p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              New Contact
+            </p>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <input
+                type="text"
+                placeholder="Full name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+              <input
+                type="email"
+                placeholder="Email address"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+              <input
+                type="tel"
+                placeholder="Phone (optional)"
+                value={newPhone}
+                onChange={(e) => setNewPhone(e.target.value)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Birthday (optional)
+                </label>
+                <input
+                  type="date"
+                  value={newBirthday}
+                  onChange={(e) => setNewBirthday(e.target.value)}
+                  className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={newStatus}
+                onChange={(e) => setNewStatus(e.target.value as ContactStatus)}
+                className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                <option value="prospect">Prospect</option>
+                <option value="active_customer">Customer</option>
+                <option value="churned">Churned</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => addMut.mutate()}
+                disabled={!newEmail.trim() || addMut.isPending}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
+                  newEmail.trim() && !addMut.isPending
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "cursor-not-allowed bg-muted text-muted-foreground",
+                )}
+              >
+                {addMut.isPending ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <UserPlus size={12} />
+                )}
+                Save
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAddForm(false)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="overflow-auto rounded-lg border border-border">
           {isLoading ? (
@@ -917,32 +1042,45 @@ function OutreachSection({ businessId }: { businessId: string }) {
                   <th className="px-3 py-2 text-left">Name</th>
                   <th className="px-3 py-2 text-left">Email</th>
                   <th className="px-3 py-2 text-left">Status</th>
+                  <th className="px-3 py-2 text-left">Birthday</th>
                 </tr>
               </thead>
               <tbody>
-                {contacts.map((c) => (
-                  <tr
-                    key={c.id}
-                    onClick={() => {
-                      setSelectedContact(c);
-                      setSendSuccess(false);
-                    }}
-                    className={cn(
-                      "cursor-pointer border-b transition-colors hover:bg-muted/30",
-                      selectedContact?.id === c.id && "bg-primary/5",
-                    )}
-                  >
-                    <td className="px-3 py-2.5 font-medium">
-                      {c.full_name || "—"}
-                    </td>
-                    <td className="px-3 py-2.5 text-muted-foreground">
-                      {c.email}
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <StatusBadge status={c.status} />
-                    </td>
-                  </tr>
-                ))}
+                {contacts.map((c) => {
+                  const bdayInfo = getBirthdayInfo(c.birthday);
+                  return (
+                    <tr
+                      key={c.id}
+                      onClick={() => {
+                        setSelectedContact(c);
+                        setSendSuccess(false);
+                      }}
+                      className={cn(
+                        "cursor-pointer border-b transition-colors hover:bg-muted/30",
+                        selectedContact?.id === c.id && "bg-primary/5",
+                        bdayInfo.isThisMonth && "bg-amber-50/30 dark:bg-amber-900/10",
+                      )}
+                    >
+                      <td className="px-3 py-2.5 font-medium">
+                        {c.full_name || "—"}
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground">
+                        {c.email}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <StatusBadge status={c.status} />
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                        {bdayInfo.label ? (
+                          <span className={cn("flex items-center gap-1", bdayInfo.isThisMonth && "font-semibold text-amber-600 dark:text-amber-400")}>
+                            {bdayInfo.isThisMonth && "🎂 "}
+                            {bdayInfo.label}
+                          </span>
+                        ) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}

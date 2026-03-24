@@ -46,6 +46,7 @@ export interface Contact {
   state: string | null;
   zip_code: string | null;
   country: string | null;
+  birthday: string | null;  // ISO date: "YYYY-MM-DD"
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -125,6 +126,7 @@ export async function createContact(
     email?: string;
     status?: ContactStatus;
     source_channel?: string;
+    birthday?: string;
     notes?: string;
   },
 ): Promise<Contact> {

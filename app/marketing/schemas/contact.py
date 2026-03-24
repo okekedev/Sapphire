@@ -2,7 +2,7 @@
 
 from uuid import UUID
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, date
 
 from pydantic import BaseModel, Field, AliasChoices
 
@@ -118,6 +118,7 @@ class ContactCreate(BaseModel):
     state: Optional[str] = Field(None, max_length=100)
     zip_code: Optional[str] = Field(None, max_length=20)
     country: Optional[str] = Field(None, max_length=100)
+    birthday: Optional[date] = None
     notes: Optional[str] = None
 
 
@@ -143,6 +144,7 @@ class ContactUpdate(BaseModel):
     state: Optional[str] = Field(None, max_length=100)
     zip_code: Optional[str] = Field(None, max_length=20)
     country: Optional[str] = Field(None, max_length=100)
+    birthday: Optional[date] = None
     notes: Optional[str] = None
 
 
@@ -174,6 +176,7 @@ class ContactOut(BaseModel):
     state: Optional[str] = None
     zip_code: Optional[str] = None
     country: Optional[str] = None
+    birthday: Optional[date] = None
     notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime

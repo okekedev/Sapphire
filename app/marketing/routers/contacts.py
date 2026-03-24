@@ -195,6 +195,7 @@ async def create_contact(
         state=payload.state,
         zip_code=payload.zip_code,
         country=payload.country,
+        birthday=payload.birthday,
         notes=payload.notes,
     )
     db.add(contact)

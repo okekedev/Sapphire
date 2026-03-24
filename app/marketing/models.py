@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, DateTime, Boolean, Text, ForeignKey, Numeric, Integer, text
+from sqlalchemy import String, DateTime, Date, Boolean, Text, ForeignKey, Numeric, Integer, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -108,6 +108,9 @@ class Contact(Base):
     state: Mapped[Optional[str]] = mapped_column(String(100))
     zip_code: Mapped[Optional[str]] = mapped_column(String(20))
     country: Mapped[Optional[str]] = mapped_column(String(100))
+
+    # ── Birthday ──
+    birthday: Mapped[Optional["date"]] = mapped_column(Date, nullable=True)
 
     # ── Notes ──
     notes: Mapped[Optional[str]] = mapped_column(Text)
