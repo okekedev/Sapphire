@@ -41,6 +41,7 @@ class EmailSendRequest(BaseModel):
 class AIFollowupRequest(BaseModel):
     contact_id: str
     tone: str = "professional"
+    occasion: str | None = None  # e.g. "birthday", "christmas", "new_year", "check_in"
 
 
 # ── Endpoints ──
@@ -216,7 +217,20 @@ async def generate_ai_followup(
     if biz and biz.name:
         business_name = biz.name
 
-    # Generate AI draft
+    # Generate AI draft — occasion-based or conversation follow-up
+    if payload.occasion:
+        result = await email_service.generate_occasion_email(
+            occasion=payload.occasion,
+            business_name=business_name,
+            lead_name=contact.full_name or "there",
+        )
+        return {
+            "draft": result["body"],
+            "subject": result["subject"],
+            "contact_name": contact.full_name,
+            "contact_email": contact.email,
+        }
+
     draft = await email_service.generate_followup(
         thread_summary=thread_text,
         business_name=business_name,
@@ -226,6 +240,7 @@ async def generate_ai_followup(
 
     return {
         "draft": draft,
+        "subject": None,
         "contact_name": contact.full_name,
         "contact_email": contact.email,
     }

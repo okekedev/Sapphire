@@ -21,10 +21,12 @@ export interface AIFollowupPayload {
   contact_id: string;
   lead_id?: string;
   tone?: string;
+  occasion?: string;
 }
 
 export interface AIFollowupResponse {
   draft: string;
+  subject: string | null;
   contact_name: string | null;
   contact_email: string | null;
 }

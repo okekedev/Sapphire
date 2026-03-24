@@ -796,11 +796,26 @@ function ChatSection({
 
 // ── Outreach Section ──
 
+const OCCASIONS = [
+  { key: "birthday",      label: "🎂 Birthday" },
+  { key: "christmas",     label: "🎄 Christmas" },
+  { key: "new_year",      label: "🎆 New Year" },
+  { key: "thanksgiving",  label: "🦃 Thanksgiving" },
+  { key: "fourth_of_july", label: "🇺🇸 4th of July" },
+  { key: "mothers_day",   label: "🌷 Mother's Day" },
+  { key: "fathers_day",   label: "👔 Father's Day" },
+  { key: "check_in",      label: "👋 Check-in" },
+  { key: "win_back",      label: "🔄 Win-back" },
+] as const;
+
+type OccasionKey = (typeof OCCASIONS)[number]["key"];
+
 function OutreachSection({ businessId }: { businessId: string }) {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [occasion, setOccasion] = useState<OccasionKey>("check_in");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sendSuccess, setSendSuccess] = useState(false);
@@ -824,13 +839,10 @@ function OutreachSection({ businessId }: { businessId: string }) {
 
   const draftMut = useMutation({
     mutationFn: () =>
-      generateAIFollowup(businessId, { contact_id: selectedContact!.id }),
+      generateAIFollowup(businessId, { contact_id: selectedContact!.id, occasion }),
     onSuccess: (res) => {
       setBody(res.draft);
-      if (!subject)
-        setSubject(
-          `Following up — ${selectedContact?.full_name ?? res.contact_name ?? ""}`,
-        );
+      if (res.subject) setSubject(res.subject);
     },
   });
 
@@ -967,6 +979,30 @@ function OutreachSection({ businessId }: { businessId: string }) {
               </button>
             </div>
 
+            {/* Occasion picker */}
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Occasion
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {OCCASIONS.map((o) => (
+                  <button
+                    key={o.key}
+                    type="button"
+                    onClick={() => setOccasion(o.key)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                      occasion === o.key
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:bg-muted/50",
+                    )}
+                  >
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <input
               type="text"
               placeholder="Subject"
@@ -975,7 +1011,7 @@ function OutreachSection({ businessId }: { businessId: string }) {
               className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
             />
             <textarea
-              placeholder="Write your message..."
+              placeholder="Write your message or click AI Draft to generate one..."
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={6}

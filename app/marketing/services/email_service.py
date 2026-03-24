@@ -124,6 +124,56 @@ class EmailService:
         safe_slug = campaign_slug.lower().replace(" ", "-")
         return f"{safe_slug}@{domain}"
 
+    async def generate_occasion_email(
+        self,
+        occasion: str,
+        business_name: str,
+        lead_name: str,
+    ) -> dict:
+        """
+        Generate a warm occasion-based outreach email (birthday, Christmas, etc.).
+        Returns {"subject": "...", "body": "..."}.
+        """
+        from app.core.services.anthropic_service import anthropic_service
+
+        occasion_context = {
+            "birthday": "It's their birthday. Send warm birthday wishes.",
+            "christmas": "It's Christmas. Send warm holiday wishes.",
+            "new_year": "It's New Year. Send a warm new year message.",
+            "thanksgiving": "It's Thanksgiving. Express gratitude for the relationship.",
+            "fourth_of_july": "It's 4th of July / Independence Day. Keep it light and festive.",
+            "mothers_day": "It's Mother's Day. Keep it warm and personal.",
+            "fathers_day": "It's Father's Day. Keep it warm and personal.",
+            "check_in": "Just checking in — no specific occasion. Keep it brief and genuine.",
+            "win_back": "They haven't heard from us in a while. Re-engage them warmly.",
+        }
+        context = occasion_context.get(occasion, f"Occasion: {occasion}.")
+
+        system = (
+            "You write short, warm outreach emails for small businesses. "
+            "Return JSON with exactly two keys: 'subject' and 'body'. "
+            "Keep the body to 2-3 sentences — brief and personal, not sales-y."
+        )
+        prompt = (
+            f"Write a {occasion.replace('_', ' ')} outreach email on behalf of {business_name}.\n"
+            f"Recipient: {lead_name}.\n"
+            f"Context: {context}\n\n"
+            f"Return valid JSON: {{\"subject\": \"...\", \"body\": \"...\"}}"
+        )
+
+        try:
+            raw = await anthropic_service.chat(system_prompt=system, message=prompt)
+            # Strip markdown code fences if present
+            clean = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
+            result = json.loads(clean)
+            return {
+                "subject": str(result.get("subject", "")),
+                "body": str(result.get("body", "")),
+            }
+        except Exception as e:
+            logger.error(f"Occasion email generation failed: {e}")
+            return {"subject": "", "body": ""}
+
     async def generate_followup(
         self,
         thread_summary: str,
@@ -133,7 +183,6 @@ class EmailService:
     ) -> str:
         """
         Generate an AI follow-up email draft based on conversation history.
-        Uses Claude CLI for generation.
         """
         from app.core.services.anthropic_service import anthropic_service
 
