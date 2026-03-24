@@ -19,6 +19,8 @@ import {
   FileImage,
   Clock,
   XCircle,
+  Mail,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useAppStore } from "@/shared/stores/app-store";
@@ -40,6 +42,8 @@ import {
   type MediaFile,
   type ContentPost,
 } from "@/marketing/api/content";
+import { listContacts, type Contact, type ContactStatus } from "@/marketing/api/contacts";
+import { sendEmail, generateAIFollowup, getEmailThread } from "@/marketing/api/email";
 
 // ── Brand SVG Icons ──
 
@@ -112,6 +116,7 @@ export default function MarketingPage() {
 
   const [accountsOpen, setAccountsOpen] = useState(false);
   const [studioOpen, setStudioOpen] = useState(true);
+  const [outreachOpen, setOutreachOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
 
   // Get marketing department + head employee
@@ -194,7 +199,17 @@ export default function MarketingPage() {
         <ContentStudioSection businessId={bizId} lastPostedMap={lastPostedMap} />
       </CollapsibleSection>
 
-      {/* Section 3: Chat */}
+      {/* Section 3: Email Outreach */}
+      <CollapsibleSection
+        icon={<Mail size={18} />}
+        title="Email Outreach"
+        open={outreachOpen}
+        onToggle={() => setOutreachOpen((v) => !v)}
+      >
+        <OutreachSection businessId={bizId} />
+      </CollapsibleSection>
+
+      {/* Section 4: Chat */}
       <CollapsibleSection
         icon={<MessageSquare size={18} />}
         title="Chat"
@@ -776,6 +791,328 @@ function ChatSection({
         </p>
       )}
     </div>
+  );
+}
+
+// ── Outreach Section ──
+
+function OutreachSection({ businessId }: { businessId: string }) {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [sendSuccess, setSendSuccess] = useState(false);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["contacts-outreach", businessId, statusFilter, search],
+    queryFn: () =>
+      listContacts(businessId, {
+        status: statusFilter !== "all" ? (statusFilter as ContactStatus) : undefined,
+        search: search || undefined,
+        limit: 200,
+      }),
+    enabled: !!businessId,
+  });
+
+  const { data: threadData } = useQuery({
+    queryKey: ["email-thread", selectedContact?.id, businessId],
+    queryFn: () => getEmailThread(selectedContact!.id, businessId),
+    enabled: !!selectedContact,
+  });
+
+  const draftMut = useMutation({
+    mutationFn: () =>
+      generateAIFollowup(businessId, { contact_id: selectedContact!.id }),
+    onSuccess: (res) => {
+      setBody(res.draft);
+      if (!subject)
+        setSubject(
+          `Following up — ${selectedContact?.full_name ?? res.contact_name ?? ""}`,
+        );
+    },
+  });
+
+  const sendMut = useMutation({
+    mutationFn: () =>
+      sendEmail(businessId, {
+        contact_id: selectedContact!.id,
+        subject: subject.trim(),
+        body: body.trim(),
+      }),
+    onSuccess: () => {
+      setSendSuccess(true);
+      setSubject("");
+      setBody("");
+      queryClient.invalidateQueries({
+        queryKey: ["email-thread", selectedContact?.id],
+      });
+      setTimeout(() => setSendSuccess(false), 3000);
+    },
+  });
+
+  const contacts = (data?.contacts ?? []).filter((c) => c.email);
+
+  return (
+    <div className="flex flex-col gap-4 lg:flex-row lg:gap-6">
+      {/* Contact list */}
+      <div className="flex min-h-0 flex-1 flex-col gap-3">
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="text"
+            placeholder="Search contacts..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="min-w-[160px] flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+          />
+          {(["all", "prospect", "active_customer", "churned"] as const).map(
+            (s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  statusFilter === s
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:bg-muted/50",
+                )}
+              >
+                {s === "all"
+                  ? "All"
+                  : s === "active_customer"
+                    ? "Customers"
+                    : s.charAt(0).toUpperCase() + s.slice(1)}
+              </button>
+            ),
+          )}
+        </div>
+
+        <div className="overflow-auto rounded-lg border border-border">
+          {isLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : contacts.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No contacts with email addresses found.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-3 py-2 text-left">Name</th>
+                  <th className="px-3 py-2 text-left">Email</th>
+                  <th className="px-3 py-2 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {contacts.map((c) => (
+                  <tr
+                    key={c.id}
+                    onClick={() => {
+                      setSelectedContact(c);
+                      setSendSuccess(false);
+                    }}
+                    className={cn(
+                      "cursor-pointer border-b transition-colors hover:bg-muted/30",
+                      selectedContact?.id === c.id && "bg-primary/5",
+                    )}
+                  >
+                    <td className="px-3 py-2.5 font-medium">
+                      {c.full_name || "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {c.email}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <StatusBadge status={c.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        <p className="text-[10px] text-muted-foreground">
+          {contacts.length} contact{contacts.length !== 1 ? "s" : ""} with email
+        </p>
+      </div>
+
+      {/* Compose panel */}
+      <div className="w-full shrink-0 lg:w-[380px]">
+        {!selectedContact ? (
+          <div className="flex h-48 items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted-foreground">
+            Select a contact to compose
+          </div>
+        ) : (
+          <div className="space-y-3 rounded-lg border border-border p-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">
+                  {selectedContact.full_name || selectedContact.email}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedContact.email}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedContact(null)}
+                className="rounded p-1 text-muted-foreground/60 hover:text-muted-foreground"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Subject"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+            <textarea
+              placeholder="Write your message..."
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={6}
+              className="w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+            />
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => draftMut.mutate()}
+                disabled={draftMut.isPending}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-50"
+              >
+                {draftMut.isPending ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Sparkles size={12} />
+                )}
+                AI Draft
+              </button>
+              <button
+                type="button"
+                onClick={() => sendMut.mutate()}
+                disabled={
+                  !subject.trim() || !body.trim() || sendMut.isPending
+                }
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors",
+                  subject.trim() && body.trim() && !sendMut.isPending
+                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                    : "cursor-not-allowed bg-muted text-muted-foreground",
+                )}
+              >
+                {sendMut.isPending ? (
+                  <Loader2 size={12} className="animate-spin" />
+                ) : (
+                  <Send size={12} />
+                )}
+                Send
+              </button>
+              {sendSuccess && (
+                <span className="flex items-center gap-1 text-xs text-emerald-600">
+                  <CheckCircle2 size={12} />
+                  Sent!
+                </span>
+              )}
+            </div>
+
+            {sendMut.isError && (
+              <p className="text-xs text-destructive">
+                Failed to send. Check email settings in Connections.
+              </p>
+            )}
+
+            {/* Thread history */}
+            {(threadData?.emails ?? []).length > 0 && (
+              <div className="mt-2 space-y-2 border-t border-border pt-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Email History
+                </p>
+                <div className="max-h-52 space-y-2 overflow-y-auto">
+                  {threadData!.emails.map((email) => (
+                    <div
+                      key={email.id}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-xs",
+                        email.direction === "inbound"
+                          ? "border-border bg-muted/30"
+                          : "border-primary/20 bg-primary/5",
+                      )}
+                    >
+                      <div className="mb-0.5 flex items-center justify-between">
+                        <span
+                          className={cn(
+                            "font-semibold",
+                            email.direction === "outbound" && "text-primary",
+                          )}
+                        >
+                          {email.direction === "inbound"
+                            ? "↩ Received"
+                            : "↪ Sent"}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {email.created_at
+                            ? new Date(email.created_at).toLocaleDateString()
+                            : ""}
+                        </span>
+                      </div>
+                      {email.subject && (
+                        <p className="mb-0.5 font-medium">{email.subject}</p>
+                      )}
+                      <p className="line-clamp-2 text-muted-foreground">
+                        {email.body}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    new: {
+      label: "New",
+      cls: "text-amber-600 bg-amber-50 dark:bg-amber-900/20 dark:text-amber-400",
+    },
+    prospect: {
+      label: "Prospect",
+      cls: "text-blue-600 bg-blue-50 dark:bg-blue-900/20 dark:text-blue-400",
+    },
+    active_customer: {
+      label: "Customer",
+      cls: "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400",
+    },
+    churned: { label: "Churned", cls: "text-muted-foreground bg-muted" },
+    no_conversion: {
+      label: "No Convert",
+      cls: "text-muted-foreground bg-muted",
+    },
+    other: { label: "Other", cls: "text-muted-foreground bg-muted" },
+  };
+  const info = map[status] ?? {
+    label: status,
+    cls: "text-muted-foreground bg-muted",
+  };
+  return (
+    <span
+      className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", info.cls)}
+    >
+      {info.label}
+    </span>
   );
 }
 
