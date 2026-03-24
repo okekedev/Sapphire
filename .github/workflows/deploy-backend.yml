@@ -60,4 +60,5 @@ jobs:
           az containerapp update \
             --name ca-sapphire-prod \
             --resource-group rg-sapphire-prod \
-            --image ghcr.io/okekedev/sapphire-backend:latest
+            --image ghcr.io/okekedev/sapphire-backend:latest \
+            --revision-suffix "r$(date +%s)"
