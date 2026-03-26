@@ -9,7 +9,7 @@ Interactions log every touchpoint: calls, emails, form submits, SMS, payments.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from sqlalchemy import String, DateTime, Date, Boolean, Text, ForeignKey, Numeric, Integer, text
