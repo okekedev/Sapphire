@@ -147,7 +147,7 @@ async def microsoft_callback(
     # Redirect to frontend — tokens in hash fragment (not logged by servers)
     redirect = (
         f"{settings.frontend_url}/auth/callback"
-        f"#access_token={tokens['access_token']}&refresh_token={tokens['refresh_token']}"
+        f"#access_token={tokens.access_token}&refresh_token={tokens.refresh_token}"
     )
     return RedirectResponse(url=redirect)
 
