@@ -78,7 +78,19 @@ async def create_business(
     user_id: UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new business and set up its file directory."""
+    """Create a new business. Each user account is limited to one business."""
+    # Enforce single business per account
+    existing = await db.execute(
+        select(Business)
+        .join(BusinessMember, BusinessMember.business_id == Business.id)
+        .where(BusinessMember.user_id == user_id)
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You already have a business. Only one business per account is allowed.",
+        )
+
     business = Business(
         name=body.name,
         website=body.website,

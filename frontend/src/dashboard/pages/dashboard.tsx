@@ -64,9 +64,9 @@ export default function DashboardPage() {
   });
 
   const { data: orgChart, isLoading: orgLoading } = useQuery({
-    queryKey: ["org-chart", bizId],
-    queryFn: () => getOrgChart(bizId),
-    enabled: !!bizId,
+    queryKey: ["org-chart"],
+    queryFn: () => getOrgChart(),
+    staleTime: 5 * 60 * 1000,
   });
 
   return (
