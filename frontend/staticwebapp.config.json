@@ -7,7 +7,7 @@
   ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/api/**", "*.{css,js,ts,png,jpg,gif,ico,woff,woff2,svg,map}"]
+    "exclude": ["/api/*", "*.{css,js,ts,png,jpg,gif,ico,woff,woff2,svg,map}"]
   },
   "responseOverrides": {
     "404": {
