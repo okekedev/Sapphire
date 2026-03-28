@@ -26,12 +26,20 @@ auth_service = AuthService()
 
 
 def _msal_app():
-    """MSAL app using client secret loaded from Key Vault via System-Assigned MI."""
+    """MSAL app using UAMI federated credential — no client secret.
+
+    The user-assigned MI (uami-sapphire-prod) is configured as a federated
+    identity credential on the Sapphire App Registration. MSAL acquires an
+    MI token for audience api://AzureADTokenExchange and presents it as a
+    client_assertion. Requires msal>=1.29.0.
+    """
     import msal
     return msal.ConfidentialClientApplication(
         settings.azure_ad_client_id,
         authority=f"https://login.microsoftonline.com/{settings.azure_ad_tenant_id}",
-        client_credential=settings.azure_ad_client_secret,
+        client_credential=msal.UserAssignedManagedIdentity(
+            client_id=settings.uami_client_id,
+        ),
     )
 
 

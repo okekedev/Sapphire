@@ -1,52 +1,60 @@
-# Sapphire — requirements (unpinned, install latest stable)
-# Lock versions after confirming compatibility: pip freeze > requirements.lock
+# Sapphire — pinned requirements (last updated 2026-03-28)
+# To update: pip install --upgrade <package> && pip freeze > check, then update here.
+# stripe and starlette held back — major version breaks (15.x and 1.x respectively).
 
 # --- Core Framework ---
-fastapi
-uvicorn[standard]
-pydantic[email]
-pydantic-settings
-python-multipart
+fastapi==0.135.2
+uvicorn[standard]==0.42.0
+pydantic[email]==2.12.5
+pydantic-settings==2.13.1
+python-multipart==0.0.22
 
 # --- Database ---
-sqlalchemy[asyncio]
-asyncpg
+SQLAlchemy[asyncio]==2.0.48
+asyncpg==0.31.0
 
 # --- Auth ---
-python-jose[cryptography]
-passlib[bcrypt]
-bcrypt
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+bcrypt==5.0.0
 
 # --- HTTP Client (async) ---
-httpx
+httpx==0.28.1
+aiohttp==3.13.4
+requests==2.33.0
 
 # --- Encryption ---
-cryptography
+cryptography==46.0.6
 
 # --- Logging ---
-structlog
+structlog==25.5.0
 
 # --- Scheduling ---
-apscheduler
+APScheduler==3.11.2
 
 # --- Twilio (SMS, voice calls, tracking numbers) ---
-twilio
+twilio==9.10.4
 
 # --- Stripe (invoicing, subscriptions, billing) ---
-stripe
+stripe==14.4.1
 
 # --- ngrok (local tunnel for Twilio webhook dev) ---
-pyngrok
+pyngrok==7.5.1
 
 # --- Azure ---
-azure-identity
-azure-keyvault-secrets
-azure-ai-projects
-msal
+azure-identity==1.25.3
+azure-keyvault-secrets==4.10.0
+azure-ai-projects==2.0.1
+# msal 1.29+ required for UserAssignedManagedIdentity (federated credential, no client secret)
+msal==1.35.1
+
+# --- AI ---
+openai==2.30.0
 
 # --- Utilities ---
-python-dotenv
+python-dotenv==1.2.2
+anyio==4.13.0
 
 # --- Testing ---
-pytest
-pytest-asyncio
+pytest==9.0.2
+pytest-asyncio==1.3.0

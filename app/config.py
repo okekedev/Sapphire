@@ -58,9 +58,11 @@ class Settings(BaseSettings):
     # Redirect URI to register: http://localhost:8000/api/v1/auth/microsoft/callback
     azure_ad_tenant_id: str = ""
     azure_ad_client_id: str = ""
-    azure_ad_client_secret: str = ""
     azure_ad_group_id: str = ""  # Object ID of "Sapphire Users" group; empty = skip group check
     azure_ad_redirect_uri: str = "http://localhost:8000/api/v1/auth/microsoft/callback"
+    # UAMI client ID (not a secret — safe as env var / Container App config)
+    # uami-sapphire-prod: 5f9b9f3d-fde9-4cc4-bd37-59b23ad59503
+    uami_client_id: str = ""
     frontend_url: str = "http://localhost:5173"
 
     # ── OAuth: LinkedIn ──
@@ -120,51 +122,44 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
     """Overlay Key Vault secrets on top of settings loaded from .env.
 
     Only runs if AZURE_KEYVAULT_URL is set. Uses DefaultAzureCredential
-    so it works with `az login` locally and Managed Identity in production.
-    Secret names map directly to setting names (underscores → hyphens).
+    (az login locally, system-assigned MI in production). No fallback —
+    if Key Vault is configured but unreachable the app will not start.
 
-    Secrets managed in Key Vault:
-      database-url, secret-key, jwt-secret-key, encryption-key,
-      foundry-agent-ids, google-client-id/secret, microsoft-client-id/secret,
-      meta-app-id/secret, linkedin-client-id/secret
+    azure_ad_client_secret is intentionally absent — auth uses UAMI
+    federated identity credentials via msal.UserAssignedManagedIdentity.
+    uami_client_id is not a secret and is set as an env var.
     """
     if not s.azure_keyvault_url:
         return s
 
-    try:
-        from app.core.services.keyvault_service import KeyVaultService
-        kv = KeyVaultService(s.azure_keyvault_url)
+    from app.core.services.keyvault_service import KeyVaultService
+    kv = KeyVaultService(s.azure_keyvault_url)
 
-        overrides = {}
-        mappings = {
-            # database_url is NOT in Key Vault — it's per-environment config (no password).
-            # Set DATABASE_URL in .env (local) or Container App env vars (production).
-            "secret-key": "secret_key",
-            "jwt-secret-key": "jwt_secret_key",
-            "encryption-key": "encryption_key",
-            "foundry-agent-ids": "foundry_agent_ids",
-            "google-client-id": "google_client_id",
-            "google-client-secret": "google_client_secret",
-            "microsoft-client-id": "microsoft_client_id",
-            "microsoft-client-secret": "microsoft_client_secret",
-            "meta-app-id": "meta_app_id",
-            "meta-app-secret": "meta_app_secret",
-            "linkedin-client-id": "linkedin_client_id",
-            "linkedin-client-secret": "linkedin_client_secret",
-            "azure-ad-client-id": "azure_ad_client_id",
-            "azure-ad-client-secret": "azure_ad_client_secret",
-        }
-        for secret_name, attr in mappings.items():
-            value = kv.get(secret_name)
-            if value:
-                overrides[attr] = value
+    overrides = {}
+    mappings = {
+        # database_url is NOT in Key Vault — per-environment config.
+        # Set DATABASE_URL in .env (local) or Container App env vars (production).
+        "secret-key": "secret_key",
+        "jwt-secret-key": "jwt_secret_key",
+        "encryption-key": "encryption_key",
+        "foundry-agent-ids": "foundry_agent_ids",
+        "google-client-id": "google_client_id",
+        "google-client-secret": "google_client_secret",
+        "microsoft-client-id": "microsoft_client_id",
+        "microsoft-client-secret": "microsoft_client_secret",
+        "meta-app-id": "meta_app_id",
+        "meta-app-secret": "meta_app_secret",
+        "linkedin-client-id": "linkedin_client_id",
+        "linkedin-client-secret": "linkedin_client_secret",
+        "azure-ad-client-id": "azure_ad_client_id",
+    }
+    for secret_name, attr in mappings.items():
+        value = kv.get(secret_name)
+        if value:
+            overrides[attr] = value
 
-        if overrides:
-            return s.model_copy(update=overrides)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Key Vault unavailable, using .env values: {e}")
-
+    if overrides:
+        return s.model_copy(update=overrides)
     return s
 
 
