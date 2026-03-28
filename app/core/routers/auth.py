@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -96,13 +96,19 @@ async def microsoft_login():
     return {"auth_url": auth_url}
 
 
-@router.get("/microsoft/callback")
-async def microsoft_callback(
+@router.get("/microsoft/exchange", response_model=TokenResponse)
+async def microsoft_exchange(
     code: str,
     state: str = "",
     db: AsyncSession = Depends(get_db),
 ):
-    """Azure AD redirects here after user authenticates."""
+    """Exchange an Azure AD authorization code for app JWT tokens.
+
+    Called via fetch() from the frontend /auth/callback page after Microsoft
+    redirects the browser there with ?code=...&state=... The redirect_uri is
+    the frontend route itself (not an /api/ path) so SWA serves index.html for
+    the navigation, and React makes this as a normal XHR/fetch request.
+    """
     result = _msal_app().acquire_token_by_authorization_code(
         code,
         scopes=["User.Read"],
@@ -114,11 +120,10 @@ async def microsoft_callback(
             detail=result.get("error_description", "Azure AD authentication failed"),
         )
 
-    # Get user info from ID token claims
     claims = result.get("id_token_claims", {})
     email = claims.get("preferred_username") or claims.get("email", "")
     name = claims.get("name") or email
-    user_oid = claims.get("oid", "")  # Azure AD object ID
+    user_oid = claims.get("oid", "")
 
     if not email:
         raise HTTPException(status_code=400, detail="No email in Azure AD token claims")
@@ -142,7 +147,6 @@ async def microsoft_callback(
         finally:
             await async_credential.close()
 
-    # Get or create user
     existing = await db.execute(select(User).where(User.email == email))
     user = existing.scalar_one_or_none()
     if not user:
@@ -150,20 +154,7 @@ async def microsoft_callback(
         db.add(user)
         await db.flush()
 
-    tokens = auth_service.create_tokens(user_id=str(user.id))
-
-    # Return a 200 HTML page that redirects client-side via window.location.replace().
-    # A 302 RedirectResponse would be followed internally by the SWA proxy, which
-    # strips the hash fragment (#access_token=...) before it ever reaches the browser.
-    import json
-    target = (
-        f"{settings.frontend_url}/auth/callback"
-        f"#access_token={tokens.access_token}&refresh_token={tokens.refresh_token}"
-    )
-    return HTMLResponse(content=f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<script>window.location.replace({json.dumps(target)});</script>
-</head><body></body></html>""")
+    return auth_service.create_tokens(user_id=str(user.id))
 
 
 @router.post("/refresh", response_model=TokenResponse)

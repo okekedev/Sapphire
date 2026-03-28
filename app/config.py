@@ -59,7 +59,9 @@ class Settings(BaseSettings):
     azure_ad_tenant_id: str = ""
     azure_ad_client_id: str = ""
     azure_ad_group_id: str = ""  # Object ID of "Sapphire Users" group; empty = skip group check
-    azure_ad_redirect_uri: str = "http://localhost:8000/api/v1/auth/microsoft/callback"
+    # Redirect URI = frontend /auth/callback route (SWA serves index.html for it).
+    # React reads ?code=... and calls /api/v1/auth/microsoft/exchange via fetch.
+    azure_ad_redirect_uri: str = "http://localhost:5173/auth/callback"
     # UAMI client ID (not a secret — safe as env var / Container App config)
     # uami-sapphire-prod: 5f9b9f3d-fde9-4cc4-bd37-59b23ad59503
     uami_client_id: str = ""
