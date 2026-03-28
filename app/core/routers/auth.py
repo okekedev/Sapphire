@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 import httpx
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -152,12 +152,18 @@ async def microsoft_callback(
 
     tokens = auth_service.create_tokens(user_id=str(user.id))
 
-    # Redirect to frontend — tokens in hash fragment (not logged by servers)
-    redirect = (
+    # Return a 200 HTML page that redirects client-side via window.location.replace().
+    # A 302 RedirectResponse would be followed internally by the SWA proxy, which
+    # strips the hash fragment (#access_token=...) before it ever reaches the browser.
+    import json
+    target = (
         f"{settings.frontend_url}/auth/callback"
         f"#access_token={tokens.access_token}&refresh_token={tokens.refresh_token}"
     )
-    return RedirectResponse(url=redirect)
+    return HTMLResponse(content=f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<script>window.location.replace({json.dumps(target)});</script>
+</head><body></body></html>""")
 
 
 @router.post("/refresh", response_model=TokenResponse)
