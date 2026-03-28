@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # Map model_tier values → Azure OpenAI deployment names
 MODEL_MAP: dict[str, str] = {
-    "opus": "gpt-5-pro",
+    "opus": "gpt-5",
     "sonnet": "gpt-5",
     "haiku": "gpt-5-mini",
 }
@@ -48,8 +48,8 @@ _LEGACY_MODEL_MAP: dict[str, str] = {
     "claude-haiku-4-5-20251001": "gpt-5-mini",
     "claude-sonnet-4-6": "gpt-5",
     "claude-sonnet-4-5": "gpt-5",
-    "claude-opus-4-6": "gpt-5-pro",
-    "claude-opus-4-5": "gpt-5-pro",
+    "claude-opus-4-6": "gpt-5",
+    "claude-opus-4-5": "gpt-5",
 }
 
 OPENAI_API_VERSION = "2025-01-01-preview"
