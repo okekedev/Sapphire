@@ -105,7 +105,7 @@ class Settings(BaseSettings):
 
     # ── Azure AI Foundry ──
     foundry_endpoint: str = "https://ai-sapphire-prod.services.ai.azure.com"
-    foundry_default_model: str = "claude-haiku-4-5"
+    foundry_default_model: str = "haiku"
     # JSON map of agent name → Foundry agent ID, stored as a single Key Vault secret.
     # Set by deploy_agents.py after first deployment. Example:
     # {"grace":"asst_abc","ivy":"asst_def","quinn":"asst_ghi","luna":"asst_jkl","morgan":"asst_mno","riley":"asst_pqr"}
@@ -137,7 +137,8 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
 
         overrides = {}
         mappings = {
-            "database-url": "database_url",
+            # database_url is NOT in Key Vault — it's per-environment config (no password).
+            # Set DATABASE_URL in .env (local) or Container App env vars (production).
             "secret-key": "secret_key",
             "jwt-secret-key": "jwt_secret_key",
             "encryption-key": "encryption_key",
