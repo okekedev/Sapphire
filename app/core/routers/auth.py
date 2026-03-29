@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
+from azure.identity.aio import ManagedIdentityCredential as AsyncManagedIdentityCredential
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -27,21 +28,28 @@ router = APIRouter(prefix="/auth")
 auth_service = AuthService()
 
 
-def _msal_app():
-    """MSAL app using UAMI federated credential — no client secret.
+async def _get_uami_assertion() -> str:
+    """Acquire a client assertion token from UAMI via IMDS.
 
-    The user-assigned MI (uami-sapphire-prod) is configured as a federated
-    identity credential on the Sapphire App Registration. MSAL acquires an
-    MI token for audience api://AzureADTokenExchange and presents it as a
-    client_assertion. Requires msal>=1.29.0.
+    Uses azure-identity's AsyncManagedIdentityCredential (which we already use
+    for Key Vault and Graph) to request a token for api://AzureADTokenExchange.
+    This token is then passed to MSAL as client_assertion.
+
+    msal.UserAssignedManagedIdentity only works with acquire_token_for_client,
+    not acquire_token_by_authorization_code — hence the manual IMDS call.
     """
+    async with AsyncManagedIdentityCredential(client_id=settings.uami_client_id) as cred:
+        token = await cred.get_token("api://AzureADTokenExchange")
+    return token.token
+
+
+def _msal_app(client_assertion: str):
+    """MSAL ConfidentialClientApplication using a pre-acquired UAMI assertion."""
     import msal
     return msal.ConfidentialClientApplication(
         settings.azure_ad_client_id,
         authority=f"https://login.microsoftonline.com/{settings.azure_ad_tenant_id}",
-        client_credential=msal.UserAssignedManagedIdentity(
-            client_id=settings.uami_client_id,
-        ),
+        client_credential={"client_assertion": client_assertion},
     )
 
 
@@ -90,7 +98,8 @@ async def microsoft_login():
     if not settings.azure_ad_client_id or not settings.azure_ad_tenant_id:
         raise HTTPException(status_code=503, detail="Azure AD not configured")
 
-    auth_url = _msal_app().get_authorization_request_url(
+    assertion = await _get_uami_assertion()
+    auth_url = _msal_app(assertion).get_authorization_request_url(
         scopes=["User.Read"],
         redirect_uri=settings.azure_ad_redirect_uri,
         state="sapphire",
@@ -111,7 +120,8 @@ async def microsoft_exchange(
     the frontend route itself (not an /api/ path) so SWA serves index.html for
     the navigation, and React makes this as a normal XHR/fetch request.
     """
-    result = _msal_app().acquire_token_by_authorization_code(
+    assertion = await _get_uami_assertion()
+    result = _msal_app(assertion).acquire_token_by_authorization_code(
         code,
         scopes=["User.Read"],
         redirect_uri=settings.azure_ad_redirect_uri,
