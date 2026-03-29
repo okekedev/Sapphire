@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   ChevronDown,
   Building2,
   Network,
   Sparkles,
-  Zap,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useAppStore } from "@/shared/stores/app-store";
@@ -16,7 +15,7 @@ import { CompanyProfileChat } from "@/shared/components/setup/company-profile-ch
 import { ProfileEditor } from "@/shared/components/setup/profile-editor";
 
 // API imports
-import { getOrgChart, getProviderStatus } from "@/shared/api/organization";
+import { getOrgChart } from "@/shared/api/organization";
 import { getCompanyProfile, type CompanyProfile } from "@/shared/api/businesses";
 import type { OrgChartNode } from "@/shared/types/organization";
 
@@ -31,26 +30,8 @@ export default function DashboardPage() {
   const [orgOpen, setOrgOpen] = useState(true);
 
   // Auto-open Company Profile if setup isn't complete
-  const { claudeConnected, profileComplete, setProfileComplete, setClaudeConnected } = useSetupStore();
-  const { accessToken } = useAppStore();
-  const setupComplete = claudeConnected && profileComplete;
-
-  // Poll provider status for Claude connection
-  const { data: providerStatus } = useQuery({
-    queryKey: ["provider-status", bizId],
-    queryFn: () => getProviderStatus(bizId),
-    enabled: !!accessToken && !!bizId,
-    refetchInterval: claudeConnected ? 30_000 : 10_000,
-  });
-
-  useEffect(() => {
-    if (!providerStatus) return;
-    if (providerStatus.ready && !claudeConnected) {
-      setClaudeConnected(true);
-    } else if (!providerStatus.ready && claudeConnected) {
-      setClaudeConnected(false);
-    }
-  }, [providerStatus, claudeConnected, setClaudeConnected]);
+  const { profileComplete, setProfileComplete } = useSetupStore();
+  const setupComplete = profileComplete;
 
   useEffect(() => {
     if (!setupComplete) setProfileOpen(true);
@@ -87,25 +68,20 @@ export default function DashboardPage() {
         onToggle={() => setProfileOpen((v) => !v)}
         badge={!setupComplete ? "Setup" : undefined}
       >
-        {/* Claude connection step — only shown when not connected */}
-        {!claudeConnected && bizId && <ConnectStep businessId={bizId} />}
-
         {/* Profile data — shown when profile exists */}
         {profileLoading ? (
           <div className="flex justify-center py-8">
             <Spinner className="h-6 w-6" />
           </div>
         ) : profile && hasProfileData(profile) ? (
-          <div className={cn(!claudeConnected && "mt-6 border-t border-border pt-5")}>
-            <ProfileEditor
-              businessId={bizId}
-              profile={profile}
-            />
-          </div>
+          <ProfileEditor
+            businessId={bizId}
+            profile={profile}
+          />
         ) : null}
 
         {/* Inline onboarding chat — only shown when NO profile exists yet */}
-        {claudeConnected && bizId && !(profile && hasProfileData(profile)) && (
+        {bizId && !(profile && hasProfileData(profile)) && (
           <CompanyProfileChat
             businessId={bizId}
             hasExistingProfile={false}
@@ -138,30 +114,6 @@ export default function DashboardPage() {
           />
         )}
       </CollapsibleSection>
-    </div>
-  );
-}
-
-// ── Connect Claude Step ──
-
-function ConnectStep({ businessId }: { businessId: string }) {
-  const navigate = useNavigate();
-
-  return (
-    <div className="mb-4">
-      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Getting Started
-      </p>
-      <button
-        onClick={() => navigate("/it")}
-        className={cn(
-          "flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium",
-          "bg-primary/10 text-primary shadow-sm cursor-pointer hover:bg-primary/15",
-        )}
-      >
-        <Zap size={15} />
-        Connect Claude
-      </button>
     </div>
   );
 }

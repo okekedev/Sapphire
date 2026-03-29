@@ -25,16 +25,16 @@ interface SetupState {
 function loadSetupState() {
   try {
     const stored = localStorage.getItem("app-setup");
-    if (!stored) return { claudeConnected: false, profileComplete: false, templateChosen: false, setupDismissed: false };
+    if (!stored) return { claudeConnected: true, profileComplete: false, templateChosen: false, setupDismissed: false };
     const parsed = JSON.parse(stored);
     return {
-      claudeConnected: parsed.claudeConnected ?? false,
+      claudeConnected: true, // AI provider (Foundry) is always available — no CLI needed
       profileComplete: parsed.profileComplete ?? parsed.orgSeeded ?? false,
       templateChosen: parsed.templateChosen ?? false,
       setupDismissed: parsed.setupDismissed ?? false,
     };
   } catch {
-    return { claudeConnected: false, profileComplete: false, templateChosen: false, setupDismissed: false };
+    return { claudeConnected: true, profileComplete: false, templateChosen: false, setupDismissed: false };
   }
 }
 
