@@ -18,9 +18,11 @@ from app.core.schemas.auth import (
     RegisterRequest,
     TokenResponse,
 )
+import structlog
 from app.core.services.auth_service import AuthService
 from app.config import settings
 
+log = structlog.get_logger(__name__)
 router = APIRouter(prefix="/auth")
 auth_service = AuthService()
 
@@ -115,6 +117,12 @@ async def microsoft_exchange(
         redirect_uri=settings.azure_ad_redirect_uri,
     )
     if "error" in result:
+        log.error(
+            "msal_exchange_failed",
+            error=result.get("error"),
+            error_description=result.get("error_description"),
+            correlation_id=result.get("correlation_id"),
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=result.get("error_description", "Azure AD authentication failed"),
