@@ -656,30 +656,6 @@ async def onboard_business(
             db=db,
             allowed_tools=["WebSearch", "WebFetch"],
         )
-    except ClaudeCliTokenExpired as e:
-        logger.warning(f"Onboarding token expired for business {business_id}: {e}")
-        return OnboardingResponse(
-            response=(
-                "Your Claude connection has expired. "
-                "Please reconnect Claude in Connections to continue."
-            ),
-            employee_name=emp_name,
-            employee_title=emp_title,
-            auth_error=True,
-            auth_error_type="token_expired",
-        )
-    except ClaudeCliNotReady as e:
-        logger.warning(f"Onboarding CLI not ready for business {business_id}: {e}")
-        return OnboardingResponse(
-            response=(
-                "Claude CLI isn't connected yet. "
-                "Please connect Claude first in the setup banner."
-            ),
-            employee_name=emp_name,
-            employee_title=emp_title,
-            auth_error=True,
-            auth_error_type="not_connected",
-        )
     except ClaudeCliError as e:
         logger.error(f"Onboarding failed for business {business_id}: {e}")
         return OnboardingResponse(

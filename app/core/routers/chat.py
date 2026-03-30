@@ -206,54 +206,6 @@ async def send_chat_message(
             conversation_id=conversation.id,
         )
 
-    except ClaudeCliTokenExpired as e:
-        logger.warning(f"CLI token expired for business {payload.business_id}: {e}")
-
-        expired_msg = (
-            "Your Claude connection has expired. "
-            "Please reconnect Claude in Connections to continue."
-        )
-        error_msg = ConversationMessage(
-            conversation_id=conversation.id,
-            role="assistant",
-            content=expired_msg,
-            status="error",
-        )
-        db.add(error_msg)
-        conversation.message_count = (conversation.message_count or 0) + 2
-
-        return ChatResponse(
-            content=expired_msg,
-            error=str(e),
-            conversation_id=conversation.id,
-            auth_error=True,
-            auth_error_type="token_expired",
-        )
-
-    except ClaudeCliNotReady as e:
-        logger.warning(f"CLI not ready for business {payload.business_id}: {e}")
-
-        not_ready_msg = (
-            "Claude CLI isn't connected yet. "
-            "Please connect Claude first in the setup banner or Connections page."
-        )
-        error_msg = ConversationMessage(
-            conversation_id=conversation.id,
-            role="assistant",
-            content=not_ready_msg,
-            status="error",
-        )
-        db.add(error_msg)
-        conversation.message_count = (conversation.message_count or 0) + 2
-
-        return ChatResponse(
-            content=not_ready_msg,
-            error=str(e),
-            conversation_id=conversation.id,
-            auth_error=True,
-            auth_error_type="not_connected",
-        )
-
     except ClaudeCliError as e:
         logger.error(f"Chat failed for business {payload.business_id}: {e}")
 
