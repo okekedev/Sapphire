@@ -96,16 +96,18 @@ export function BusinessSwitcher() {
             ))}
           </div>
 
-          {/* Divider + Add Business */}
-          <div className="border-t border-border p-1">
-            <button
-              onClick={() => setShowBusinessModal(true)}
-              className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              <span>Add Business</span>
-            </button>
-          </div>
+          {/* Add Business — only shown if user has no business yet */}
+          {businesses.length === 0 && (
+            <div className="border-t border-border p-1">
+              <button
+                onClick={() => setShowBusinessModal(true)}
+                className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Add Business</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
