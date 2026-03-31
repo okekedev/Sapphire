@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 # Map model_tier values → Azure OpenAI deployment names
 MODEL_MAP: dict[str, str] = {
-    "opus": "gpt-5",
-    "sonnet": "gpt-5",
+    "opus": "gpt-5-mini",
+    "sonnet": "gpt-5-mini",
     "haiku": "gpt-5-mini",
 }
 DEFAULT_MODEL = "haiku"
@@ -143,7 +143,7 @@ class OpenAIService:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": message},
                 ],
-                "max_tokens": 4096,
+                "max_completion_tokens": 8192,
             }
             async with httpx.AsyncClient(timeout=settings.foundry_timeout) as http:
                 r = await http.post(
