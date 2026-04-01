@@ -5,7 +5,7 @@
 
 ## Executive Summary
 
-This is an AI-powered digital agency platform where 13 Claude-powered employees organize into 6 departments that function as collaborative workspaces. Instead of traditional SaaS tooling with complex dashboards and manual processes, users interact directly with department heads — each department tab has its own AI director who handles strategy, delegates to specialist employees, and executes tasks. There is no central orchestrator; the user (Christian, the owner) goes to the department they need and works with that department's head.
+This is an AI-powered digital agency platform where 13 AI employees organize into 6 departments that function as collaborative workspaces. Instead of traditional SaaS tooling with complex dashboards and manual processes, users interact directly with department heads — each department tab has its own AI director who handles strategy, delegates to specialist employees, and executes tasks. There is no central orchestrator; the user (Christian, the owner) goes to the department they need and works with that department's head.
 
 The system uses a 20-table relational database where every CRM fact table is department-scoped: jobs in Operations, payments in Billing, content posts in Marketing. Data flows seamlessly across departments (campaign → opportunity → job → payment), with each entity linked by foreign keys. Employee system prompts and department documentation are stored in the database as the single source of truth.
 
@@ -59,11 +59,13 @@ Integrations map to departments:
 
 ### Model Tiers
 
-| Tier | Model | Use Case | Employees |
-|------|-------|----------|-----------|
-| Opus | claude-opus-4-6 | Owner / CEO + IT Director | Christian, Casey |
-| Sonnet | claude-sonnet-4-6 | Department heads + senior specialists | Elena, Marcus, Luna, Jordan, Riley, Dana, Ivy |
-| Haiku | claude-haiku-4-5-20251001 | Specialist execution, high-throughput tasks | Alex, Morgan, Quinn, Grace |
+All employees currently use **gpt-5-mini** via Azure AI Services (`ai-sapphire-prod.cognitiveservices.azure.com`). Tier names are preserved for future differentiation.
+
+| Tier | Mapped Model | Use Case | Employees |
+|------|-------------|----------|-----------|
+| Opus | gpt-5-mini | Owner / CEO + IT Director | Christian, Casey |
+| Sonnet | gpt-5-mini | Department heads + senior specialists | Elena, Marcus, Luna, Jordan, Riley, Dana, Ivy |
+| Haiku | gpt-5-mini | Specialist execution, high-throughput tasks | Alex, Morgan, Quinn, Grace |
 
 ## Technical Architecture
 
@@ -75,12 +77,11 @@ Integrations map to departments:
 | State | Zustand + TanStack React Query | UI state + server cache |
 | Backend | FastAPI + SQLAlchemy (async) + Pydantic v2 | REST API (23 routers, 23 mounts) |
 | Database | PostgreSQL (20 tables, fully relational) | Queryable state with proper dimensional FKs |
-| AI | Claude CLI (12 employee system prompts) | Per-business CLI tokens, department-scoped |
+| AI | Azure OpenAI (gpt-5-mini) via Azure AI Services | Managed identity auth, all 13 employees use gpt-5-mini |
 | Auth | JWT (HS256) + bcrypt + AES-256-GCM | User auth + credential encryption |
 | OAuth | OAuth2 Authorization Code + PKCE | Platform integrations (department-scoped) |
-| Terminal | xterm.js + WebSocket + PTY | Embedded CLI setup flow |
 | Real-time | Server-Sent Events (SSE) | Live call streaming |
-| Deployment | Docker + docker-compose | Containerized deployment |
+| Deployment | Docker → Azure Container Apps + Azure Static Web Apps | Backend on ca-sapphire-prod, frontend on SWA |
 
 ### Database Schema (20 Tables)
 
@@ -100,7 +101,7 @@ All fact tables have proper dimensional foreign keys (no JSONB storing relationa
 
 ### Employee System Prompts
 
-Employee system prompts are stored in the database (`employees.system_prompt` column). Each employee row contains the full Claude-specific instructions including role description, responsibilities, and task-specific guidance. Business context (company_profile) is injected into all employee prompts as shared context during conversations.
+Employee system prompts are stored in the database (`employees.system_prompt` column). Each employee row contains full instructions including role description, responsibilities, and task-specific guidance. Business context (company_profile) is injected into all employee prompts as shared context during conversations.
 
 ## Frontend Architecture
 
