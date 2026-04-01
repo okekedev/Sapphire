@@ -107,13 +107,9 @@ class Settings(BaseSettings):
     # ── Azure Key Vault ──
     azure_keyvault_url: str = "https://kv-sapphire-okeke.vault.azure.net"
 
-    # ── Azure AI Foundry ──
-    foundry_endpoint: str = "https://ai-sapphire-prod.services.ai.azure.com"
+    # ── Azure AI Services (OpenAI) ──
+    foundry_endpoint: str = "https://ai-sapphire-prod.cognitiveservices.azure.com"
     foundry_default_model: str = "haiku"
-    # JSON map of agent name → Foundry agent ID, stored as a single Key Vault secret.
-    # Set by deploy_agents.py after first deployment. Example:
-    # {"grace":"asst_abc","ivy":"asst_def","quinn":"asst_ghi","luna":"asst_jkl","morgan":"asst_mno","riley":"asst_pqr"}
-    foundry_agent_ids: str = "{}"
 
     @property
     def is_production(self) -> bool:
@@ -144,7 +140,6 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
         "secret-key": "secret_key",
         "jwt-secret-key": "jwt_secret_key",
         "encryption-key": "encryption_key",
-        "foundry-agent-ids": "foundry_agent_ids",
         "google-client-id": "google_client_id",
         "google-client-secret": "google_client_secret",
         "microsoft-client-id": "microsoft_client_id",
