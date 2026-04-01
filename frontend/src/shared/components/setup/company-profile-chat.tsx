@@ -42,10 +42,14 @@ export function CompanyProfileChat({
     website: "",
     socials: "",
   });
-  const [seedSubmitted, setSeedSubmitted] = useState(false);
+  const [seedSubmitted, setSeedSubmitted] = useState(hasExistingProfile);
 
   // Chat state
-  const [messages, setMessages] = useState<OnboardingMessage[]>([]);
+  const [messages, setMessages] = useState<OnboardingMessage[]>(
+    hasExistingProfile
+      ? [{ role: "assistant", content: "Your profile is built! Tell me what you'd like to update — I can refine any section, add new information, or rebuild the whole profile from scratch." }]
+      : [],
+  );
   const [input, setInput] = useState("");
   const [employeeName, setEmployeeName] = useState("Assistant");
   const [profileDone, setProfileDone] = useState(false);
@@ -67,9 +71,7 @@ export function CompanyProfileChat({
     });
   }, [messages]);
 
-  // If profile exists and not yet started, show regen prompt
   const showSeedForm = !seedSubmitted && !hasExistingProfile;
-  const showRegenPrompt = !seedSubmitted && hasExistingProfile && !showRegenConfirm;
 
   const mutation = useMutation({
     mutationFn: async ({
@@ -308,26 +310,6 @@ export function CompanyProfileChat({
               Start Research
             </button>
           </div>
-        </div>
-      )}
-
-      {/* Regenerate prompt — shown when profile exists but chat hasn't started */}
-      {showRegenPrompt && (
-        <div className="flex flex-col items-center justify-center py-8 text-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <MessageSquare size={20} className="text-primary" />
-          </div>
-          <p className="text-sm font-medium">Profile already built</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Want to regenerate it? This will replace your current profile.
-          </p>
-          <button
-            onClick={handleRegenerate}
-            className="mt-4 flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium hover:bg-muted"
-          >
-            <RefreshCw size={14} />
-            Regenerate Profile
-          </button>
         </div>
       )}
 

@@ -68,20 +68,26 @@ export default function DashboardPage() {
         onToggle={() => setProfileOpen((v) => !v)}
         badge={!setupComplete ? "Setup" : undefined}
       >
-        {/* Profile data — shown when profile exists */}
         {profileLoading ? (
           <div className="flex justify-center py-8">
             <Spinner className="h-6 w-6" />
           </div>
         ) : profile && hasProfileData(profile) ? (
-          <ProfileEditor
-            businessId={bizId}
-            profile={profile}
-          />
-        ) : null}
-
-        {/* Inline onboarding chat — only shown when NO profile exists yet */}
-        {bizId && !(profile && hasProfileData(profile)) && (
+          <>
+            <ProfileEditor businessId={bizId} profile={profile} />
+            {bizId && (
+              <div className="mt-5 border-t border-border pt-5">
+                <CompanyProfileChat
+                  businessId={bizId}
+                  hasExistingProfile={true}
+                  onProfileSaved={() =>
+                    queryClient.invalidateQueries({ queryKey: ["company-profile", bizId] })
+                  }
+                />
+              </div>
+            )}
+          </>
+        ) : bizId ? (
           <CompanyProfileChat
             businessId={bizId}
             hasExistingProfile={false}
@@ -90,7 +96,7 @@ export default function DashboardPage() {
               queryClient.invalidateQueries({ queryKey: ["company-profile", bizId] });
             }}
           />
-        )}
+        ) : null}
       </CollapsibleSection>
 
       {/* Section 2: Organization */}
