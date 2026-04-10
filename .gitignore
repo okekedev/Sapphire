@@ -64,6 +64,9 @@ local.settings.json
 *.pem
 *.key
 
+# Bicep deployment parameters (contain secrets)
+infra/params.json
+
 # Playwright
 .playwright-mcp/
 

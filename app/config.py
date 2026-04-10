@@ -197,6 +197,8 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
         # so acs_connection_string stays empty and DefaultAzureCredential is used.
         "acs-connection-string": "acs_connection_string",
         "redis-url": "redis_url",
+        "celery-broker-url": "celery_broker_url",
+        "celery-result-backend": "celery_result_backend",
         "applyra-api-key": "applyra_api_key",
     }
     for secret_name, attr in mappings.items():

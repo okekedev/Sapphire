@@ -227,7 +227,7 @@ function DispositionDropdown({
 
 export default function TrackingRoutingPage() {
   const business = useAppStore((s) => s.activeBusiness);
-  const businessId = business?.id;
+  const businessId = business?.id ?? "";
   const queryClient = useQueryClient();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -704,7 +704,7 @@ export default function TrackingRoutingPage() {
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         businessId={businessId}
-        mainlineNumber={mainlineNumber?.phone_number}
+        mainlineNumber={mainlineNumber?.phone_number ?? ""}
       />
     </div>
   );

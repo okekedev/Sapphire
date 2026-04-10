@@ -41,9 +41,13 @@ async def lifespan(app: FastAPI):
     _logger = logging.getLogger(__name__)
 
     # ── Startup ──
-    # 0. Ensure departments table has phone routing columns
+    # 0. Create all tables (idempotent — safe on every restart, bootstraps fresh DBs)
+    from app.database import Base, engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    _logger.info("✅ Database schema: all tables ensured")
+
     from sqlalchemy import text as sa_text
-    from app.database import engine
     async with engine.begin() as conn:
         await conn.execute(sa_text(
             "ALTER TABLE departments ADD COLUMN IF NOT EXISTS forward_number VARCHAR(20)"

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "azureAdTenantId":       { "value": "YOUR_TENANT_ID" },
+    "azureAdClientId":       { "value": "YOUR_AZURE_AD_CLIENT_ID" },
+    "azureAdGroupId":        { "value": "YOUR_SAPPHIRE_USERS_GROUP_OBJECT_ID" },
+    "azureAdRedirectUri":    { "value": "https://swa-sapphire-prod.azurestaticapps.net/auth/callback" },
+    "frontendUrl":           { "value": "https://swa-sapphire-prod.azurestaticapps.net" },
+
+    "encryptionKey":         { "value": "GENERATE: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"" },
+    "secretKey":             { "value": "GENERATE: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"" },
+    "jwtSecretKey":          { "value": "GENERATE: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\"" },
+    "azureAdClientSecret":   { "value": "FROM_AZURE_PORTAL_APP_REGISTRATION" },
+    "googleClientSecret":    { "value": "FROM_GOOGLE_CLOUD_CONSOLE" },
+    "googleAiApiKey":        { "value": "FROM_GOOGLE_AI_STUDIO" },
+    "metaAppSecret":         { "value": "FROM_META_DEVELOPER_PORTAL" },
+    "microsoftClientSecret": { "value": "FROM_AZURE_PORTAL_APP_REGISTRATION" },
+    "linkedinClientSecret":  { "value": "FROM_LINKEDIN_DEVELOPER_PORTAL" },
+    "twitterClientSecret":   { "value": "FROM_TWITTER_DEVELOPER_PORTAL" },
+    "tiktokClientSecret":    { "value": "FROM_TIKTOK_DEVELOPER_PORTAL" },
+    "applyraApiKey":         { "value": "FROM_APPLYRA_DASHBOARD" },
+
+    "ghcrUsername":          { "value": "okekedev" },
+    "ghcrToken":             { "value": "ghp_YOUR_GITHUB_PAT_READ_PACKAGES" }
+  }
+}

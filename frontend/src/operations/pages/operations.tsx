@@ -691,7 +691,7 @@ function PipelineColumn({
 
 export default function OperationsPage() {
   const business = useAppStore((s) => s.activeBusiness);
-  const businessId = business?.id;
+  const businessId = business?.id ?? "";
   const queryClient = useQueryClient();
 
   const [showNewJob, setShowNewJob] = useState(false);

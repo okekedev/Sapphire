@@ -86,7 +86,7 @@ function timeAgo(iso: string): string {
 
 export default function SalesPage() {
   const business = useAppStore((s) => s.activeBusiness);
-  const businessId = business?.id;
+  const businessId = business?.id ?? "";
   const queryClient = useQueryClient();
 
   const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
