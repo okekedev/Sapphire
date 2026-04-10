@@ -73,6 +73,29 @@ class Settings(BaseSettings):
     linkedin_client_secret: str = ""
     linkedin_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
 
+    # ── OAuth: Twitter / X ──
+    twitter_client_id: str = ""
+    twitter_client_secret: str = ""
+    twitter_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
+
+    # ── OAuth: TikTok ──
+    tiktok_client_key: str = ""
+    tiktok_client_secret: str = ""
+    tiktok_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
+
+    # ── Google AI / Imagen ──
+    google_ai_api_key: str = ""
+
+    # ── Applyra ASO ──
+    applyra_api_key: str = ""
+    applyra_base_url: str = "https://www.applyra.io"
+
+    # ── Redis ──
+    # Loaded from Key Vault in production; set in .env for local dev.
+    redis_url: str = ""
+    celery_broker_url: str = ""
+    celery_result_backend: str = ""
+
     # ── Email Delivery ──
     email_provider: str = "log"  # "sendgrid" | "smtp" | "log" (dev mode — prints to console)
     email_from_address: str = "outreach@seojames.io"
@@ -147,16 +170,34 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
         "secret-key": "secret_key",
         "jwt-secret-key": "jwt_secret_key",
         "encryption-key": "encryption_key",
+        # Google
         "google-client-id": "google_client_id",
         "google-client-secret": "google_client_secret",
+        "google-ai-api-key": "google_ai_api_key",
+        # Microsoft / Azure AD
         "microsoft-client-id": "microsoft_client_id",
         "microsoft-client-secret": "microsoft_client_secret",
-        "meta-app-id": "meta_app_id",
-        "meta-app-secret": "meta_app_secret",
-        "linkedin-client-id": "linkedin_client_id",
-        "linkedin-client-secret": "linkedin_client_secret",
         "azure-ad-client-id": "azure_ad_client_id",
         "azure-ad-client-secret": "azure_ad_client_secret",
+        # Meta
+        "meta-app-id": "meta_app_id",
+        "meta-app-secret": "meta_app_secret",
+        # LinkedIn
+        "linkedin-client-id": "linkedin_client_id",
+        "linkedin-client-secret": "linkedin_client_secret",
+        # Twitter / X
+        "twitter-client-id": "twitter_client_id",
+        "twitter-client-secret": "twitter_client_secret",
+        # TikTok
+        "tiktok-client-key": "tiktok_client_key",
+        "tiktok-client-secret": "tiktok_client_secret",
+        # Infrastructure
+        # acs-connection-string: loaded here for local dev only.
+        # In production the Container App MI has Contributor on the ACS resource,
+        # so acs_connection_string stays empty and DefaultAzureCredential is used.
+        "acs-connection-string": "acs_connection_string",
+        "redis-url": "redis_url",
+        "applyra-api-key": "applyra_api_key",
     }
     for secret_name, attr in mappings.items():
         value = kv.get(secret_name)
