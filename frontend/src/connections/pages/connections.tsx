@@ -119,14 +119,6 @@ export default function ConnectionsPage() {
     (connections ?? []).map((c) => [c.platform, c])
   );
 
-  if (!businessId) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-muted-foreground">Select a business to manage connections.</p>
-      </div>
-    );
-  }
-
   return (
     <div>
       <PageHeader

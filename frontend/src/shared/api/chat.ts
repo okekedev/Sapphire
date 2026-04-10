@@ -104,3 +104,25 @@ export async function sendEmployeeChat(payload: EmployeeChatRequest): Promise<Ch
   const res = await client.post("/chat/employee", payload);
   return res.data;
 }
+
+// ── Agent Chat (Foundry department agents) ──
+
+export interface AgentChatRequest {
+  business_id: string;
+  agent: string; // "admin" | "billing" | "marketing" | "operations" | "sales" | "james"
+  message: string;
+  thread_id?: string | null;
+}
+
+export interface AgentChatResponse {
+  content: string;
+  thread_id?: string | null;
+  error?: string | null;
+}
+
+export async function sendAgentChat(
+  payload: AgentChatRequest
+): Promise<AgentChatResponse> {
+  const res = await client.post("/chat/agent", payload);
+  return res.data;
+}

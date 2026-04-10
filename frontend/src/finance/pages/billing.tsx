@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   DollarSign,
@@ -21,17 +21,14 @@ import {
   X,
   Plug,
   Unplug,
-  Send,
+  FileText,
 } from "lucide-react";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
-import { Input } from "@/shared/components/ui/input";
 import { MarkdownMessage } from "@/shared/components/ui/markdown-message";
 import { PageHeader } from "@/shared/components/page-header";
 import { useAppStore } from "@/shared/stores/app-store";
-import { listEmployees, listDepartments } from "@/shared/api/organization";
-import { sendEmployeeChat, type ChatMessage } from "@/shared/api/chat";
 import {
   getStripeStatus,
   connectStripe,
@@ -47,6 +44,7 @@ import {
 } from "@/finance/api/billing";
 import { listJobs, type JobItem } from "@/sales/api/sales";
 import { cn } from "@/shared/lib/utils";
+import { DeptLayout, type DeptSection } from "@/shared/components/layout/dept-layout";
 
 // ── Helpers ──
 
@@ -164,65 +162,6 @@ function StripeConnectionBanner({
   );
 }
 
-// ── Revenue Cards ──
-
-function RevenueCards({ businessId, stripeConnected }: { businessId: string; stripeConnected: boolean }) {
-  const { data: summary } = useQuery({
-    queryKey: ["billing-summary", businessId],
-    queryFn: () => getRevenueSummary(businessId),
-    enabled: !!businessId && stripeConnected,
-  });
-
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <TrendingUp className="h-4 w-4 text-green-500" />
-            <p className="text-xs text-muted-foreground">Monthly Revenue</p>
-          </div>
-          <p className="text-2xl font-bold text-green-600">
-            {summary ? formatCurrency(summary.total_collected) : "—"}
-          </p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <DollarSign className="h-4 w-4 text-blue-500" />
-            <p className="text-xs text-muted-foreground">YTD Revenue</p>
-          </div>
-          <p className="text-2xl font-bold text-blue-600">
-            {summary ? formatCurrency(summary.total_collected) : "—"}
-          </p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <Repeat className="h-4 w-4 text-purple-500" />
-            <p className="text-xs text-muted-foreground">Recurring Revenue</p>
-          </div>
-          <p className="text-2xl font-bold text-purple-600">
-            {summary ? formatCurrency(summary.mrr) : "—"}
-          </p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <Wallet className="h-4 w-4 text-amber-500" />
-            <p className="text-xs text-muted-foreground">One-Time Revenue</p>
-          </div>
-          <p className="text-2xl font-bold text-amber-600">
-            {summary ? formatCurrency(summary.pending) : "—"}
-          </p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 // ── Build full job summary for billing context ──
 
 function buildJobSummary(job: JobItem): string {
@@ -240,53 +179,23 @@ function buildJobSummary(job: JobItem): string {
 function buildDisplaySummary(job: JobItem): string {
   const parts: string[] = [];
 
-  // Start with the description (scope of work)
   if (job.description) {
     parts.push(job.description);
   }
 
-  // Add call context if it adds new info
   if (job.call_summary && job.call_summary !== job.description) {
     parts.push(`**Customer request:** ${job.call_summary}`);
   }
 
-  // Add sales notes if they add new info beyond description + call_summary
   if (job.lead_notes && job.lead_notes !== job.call_summary && job.lead_notes !== job.description) {
     parts.push(`**Sales notes:** ${job.lead_notes}`);
   }
 
-  // Add work notes (AI-assisted narrative from Operations)
   if (job.notes) {
     parts.push(job.notes);
   }
 
   return parts.join("\n\n---\n\n");
-}
-
-// ── Mini collapsible for individual summary sections ──
-
-function SummarySection({ label, children, defaultOpen = false }: {
-  label: string;
-  children: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border-b border-border/50 last:border-b-0">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 w-full py-1.5 text-left"
-      >
-        <ChevronDown className={cn("h-3 w-3 text-muted-foreground transition-transform shrink-0", open && "rotate-180")} />
-        <span className="text-[10px] font-semibold uppercase text-muted-foreground">{label}</span>
-      </button>
-      {open && (
-        <div className="pb-2 pl-4.5">
-          {children}
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ── Billing Task Card (completed job needing invoice) ──
@@ -326,7 +235,6 @@ function BillingTaskCard({ job, onCreateInvoice, onChat }: {
           )}
         </div>
 
-        {/* Single unified job summary — one section, markdown rendered */}
         {summary && (
           <div className="rounded-md border border-border bg-muted/30 px-3 py-1.5">
             <button
@@ -344,7 +252,6 @@ function BillingTaskCard({ job, onCreateInvoice, onChat }: {
           </div>
         )}
 
-        {/* Actions */}
         <div className="flex gap-1.5 pt-1">
           <Button size="sm" className="h-7 text-xs" onClick={() => onCreateInvoice(job)}>
             <Receipt className="h-3 w-3 mr-1" /> Create Invoice
@@ -400,137 +307,6 @@ function BillingTasks({ businessId, onCreateInvoice, onChat }: {
   );
 }
 
-// ── Chat Section (with prefill support) ──
-
-function ChatSection({
-  businessId,
-  employeeId,
-  employeeName,
-  prefill,
-  onPrefillConsumed,
-}: {
-  businessId: string;
-  employeeId: string;
-  employeeName: string;
-  prefill?: string;
-  onPrefillConsumed?: () => void;
-}) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Handle prefill from task cards
-  useEffect(() => {
-    if (prefill) {
-      setInput(prefill);
-      onPrefillConsumed?.();
-    }
-  }, [prefill, onPrefillConsumed]);
-
-  const mutation = useMutation({
-    mutationFn: (userMessage: string) =>
-      sendEmployeeChat({
-        business_id: businessId,
-        employee_id: employeeId,
-        messages,
-        user_message: userMessage,
-      }),
-    onSuccess: (data, userMessage) => {
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: userMessage },
-        { role: "assistant", content: data.content },
-      ]);
-    },
-  });
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, mutation.isPending]);
-
-  const handleSend = () => {
-    const trimmed = input.trim();
-    if (!trimmed || mutation.isPending) return;
-    setInput("");
-    mutation.mutate(trimmed);
-  };
-
-  return (
-    <div className="flex flex-col">
-      <div ref={scrollRef} className="max-h-96 min-h-[200px] overflow-y-auto space-y-3 mb-4">
-        {messages.length === 0 && !mutation.isPending && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <MessageSquare size={20} className="text-primary" />
-            </div>
-            <p className="text-sm font-medium">Chat with {employeeName}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Create invoices, set up subscriptions, manage billing, or ask about revenue.
-            </p>
-          </div>
-        )}
-
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex",
-              msg.role === "user" ? "justify-end" : "justify-start",
-            )}
-          >
-            <div
-              className={cn(
-                "max-w-[80%] rounded-lg px-4 py-2.5 text-sm leading-relaxed",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted",
-              )}
-            >
-              {msg.role === "assistant" && (
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {employeeName}
-                </p>
-              )}
-              {msg.role === "assistant" ? (
-                <MarkdownMessage content={msg.content} />
-              ) : (
-                <p>{msg.content}</p>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {mutation.isPending && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-3">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span className="text-xs text-muted-foreground">Thinking...</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="flex gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          placeholder={`Ask ${employeeName}...`}
-          className="text-sm"
-          disabled={mutation.isPending}
-        />
-        <Button
-          size="sm"
-          onClick={handleSend}
-          disabled={!input.trim() || mutation.isPending}
-        >
-          <Send className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 // ── One-Time Invoices Section ──
 
 function OneTimeInvoices({ businessId }: { businessId: string }) {
@@ -540,7 +316,6 @@ function OneTimeInvoices({ businessId }: { businessId: string }) {
     enabled: !!businessId,
   });
 
-  // Filter to non-subscription invoices
   const invoices = (data?.invoices ?? []);
 
   if (isLoading) {
@@ -602,9 +377,9 @@ function OneTimeInvoices({ businessId }: { businessId: string }) {
   );
 }
 
-// ── Recurring Invoices Section ──
+// ── Subscriptions Section ──
 
-function RecurringInvoices({ businessId }: { businessId: string }) {
+function SubscriptionList({ businessId }: { businessId: string }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["billing-subscriptions", businessId],
     queryFn: () => listStripeSubscriptions(businessId, { limit: 50 }),
@@ -670,55 +445,6 @@ function RecurringInvoices({ businessId }: { businessId: string }) {
   );
 }
 
-// ── Collapsible Section (matches Sales pattern) ──
-
-function CollapsibleSection({
-  icon,
-  title,
-  subtitle,
-  open,
-  onToggle,
-  action,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  open: boolean;
-  onToggle: () => void;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-muted/50"
-      >
-        <span className="flex items-center gap-2.5">
-          <span className="text-primary">{icon}</span>
-          <span className="font-semibold">{title}</span>
-          {subtitle && (
-            <span className="text-xs text-muted-foreground">{subtitle}</span>
-          )}
-        </span>
-        <span className="flex items-center gap-2">
-          {action}
-          <ChevronDown
-            size={16}
-            className={cn(
-              "text-muted-foreground transition-transform duration-200",
-              open && "rotate-180",
-            )}
-          />
-        </span>
-      </button>
-      {open && <div className="border-t border-border px-5 py-5">{children}</div>}
-    </div>
-  );
-}
-
 // ── Main Billing Page ──
 
 export default function BillingPage() {
@@ -726,14 +452,7 @@ export default function BillingPage() {
   const businessId = activeBusiness?.id ?? "";
   const queryClient = useQueryClient();
 
-  // Section open/close state
-  const [stripeOpen, setStripeOpen] = useState(false);
-  const [quickbooksOpen, setQuickbooksOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatPrefill, setChatPrefill] = useState("");
-  const [tasksOpen, setTasksOpen] = useState(false);
-  const [oneTimeOpen, setOneTimeOpen] = useState(false);
-  const [recurringOpen, setRecurringOpen] = useState(false);
+  const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
 
   // Stripe connect modal state
   const [showStripeModal, setShowStripeModal] = useState(false);
@@ -772,22 +491,6 @@ export default function BillingPage() {
   const stripeConnected = stripeStatus?.connected ?? false;
 
   // Find Billing department + head employee (Quinn)
-  const departmentsQuery = useQuery({
-    queryKey: ["billing-departments", businessId],
-    queryFn: () => listDepartments(businessId),
-    enabled: !!businessId,
-  });
-
-  const billingDept = departmentsQuery.data?.find((d) => d.name === "Billing");
-
-  const employeesQuery = useQuery({
-    queryKey: ["billing-employees", businessId, billingDept?.id],
-    queryFn: () => listEmployees({ business_id: businessId, department_id: billingDept!.id }),
-    enabled: !!businessId && !!billingDept?.id,
-  });
-
-  const quinn = employeesQuery.data?.find((e) => e.is_head);
-
   // Jobs in billing status
   const { data: tasksData } = useQuery({
     queryKey: ["billing-tasks", businessId],
@@ -796,39 +499,39 @@ export default function BillingPage() {
   });
   const taskCount = tasksData?.jobs?.length ?? 0;
 
+  // Invoice count for badge (unpaid = open status)
+  const { data: invoicesData } = useQuery({
+    queryKey: ["billing-invoices-onetime", businessId],
+    queryFn: () => listStripeInvoices(businessId, { limit: 50 }),
+    enabled: !!businessId && stripeConnected,
+  });
+  const unpaidCount = invoicesData?.invoices?.filter((inv: StripeInvoice) => inv.status === "open").length ?? 0;
+
+  // Revenue summary
+  const { data: revenueSummary } = useQuery({
+    queryKey: ["billing-summary", businessId],
+    queryFn: () => getRevenueSummary(businessId),
+    enabled: !!businessId && stripeConnected,
+  });
+
   // Task card actions → open chat with prefill (include full job context)
   const handleCreateInvoice = (job: JobItem) => {
     const amount = job.amount_quoted ? `$${job.amount_quoted.toLocaleString()}` : "TBD";
     const summary = buildJobSummary(job);
-    const contextBlock = summary
-      ? `\n\nCompleted Job Summary:\n${summary}`
-      : "";
-    setChatPrefill(
+    const contextBlock = summary ? `\n\nCompleted Job Summary:\n${summary}` : "";
+    setPendingChatMessage(
       `Create an invoice for job "${job.title}" — customer: ${job.contact_name || "Unknown"}, quoted amount: ${amount}. Job ID: ${job.id}${contextBlock}`
     );
-    setChatOpen(true);
   };
 
   const handleChatAboutJob = (job: JobItem) => {
     const amount = job.amount_quoted ? `$${job.amount_quoted.toLocaleString()}` : "TBD";
     const summary = buildJobSummary(job);
-    const contextBlock = summary
-      ? `\n\nCompleted Job Summary:\n${summary}`
-      : "";
-    setChatPrefill(
+    const contextBlock = summary ? `\n\nCompleted Job Summary:\n${summary}` : "";
+    setPendingChatMessage(
       `I want to discuss billing for job "${job.title}" — customer: ${job.contact_name || "Unknown"}, quoted amount: ${amount}. Job ID: ${job.id}${contextBlock}`
     );
-    setChatOpen(true);
   };
-
-  if (!businessId) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center gap-2 text-muted-foreground">
-        <DollarSign className="h-8 w-8" />
-        <p className="text-sm">No business selected</p>
-      </div>
-    );
-  }
 
   if (stripeLoading) {
     return (
@@ -839,40 +542,84 @@ export default function BillingPage() {
     );
   }
 
-  return (
-    <div className="flex flex-col gap-6 p-6">
-      <PageHeader
-        title="Billing"
-        description="Invoicing, payments, and revenue tracking"
-      />
+  // ── Section content ──
 
-      {/* 1. Stripe Connection */}
-      <CollapsibleSection
-        icon={<Zap size={18} />}
-        title="Stripe"
-        subtitle={stripeConnected ? "Connected" : "Not connected"}
-        open={stripeOpen}
-        onToggle={() => setStripeOpen((v) => !v)}
-      >
+  const overviewContent = (
+    <div className="space-y-6">
+      {/* KPI cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="h-4 w-4 text-green-500" />
+              <p className="text-xs text-muted-foreground">Monthly Revenue</p>
+            </div>
+            <p className="text-2xl font-bold text-green-600">
+              {revenueSummary ? formatCurrency(revenueSummary.total_collected) : "—"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <DollarSign className="h-4 w-4 text-blue-500" />
+              <p className="text-xs text-muted-foreground">YTD Revenue</p>
+            </div>
+            <p className="text-2xl font-bold text-blue-600">
+              {revenueSummary ? formatCurrency(revenueSummary.total_collected) : "—"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Repeat className="h-4 w-4 text-purple-500" />
+              <p className="text-xs text-muted-foreground">Recurring Revenue</p>
+            </div>
+            <p className="text-2xl font-bold text-purple-600">
+              {revenueSummary ? formatCurrency(revenueSummary.mrr) : "—"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <Wallet className="h-4 w-4 text-amber-500" />
+              <p className="text-xs text-muted-foreground">One-Time Revenue</p>
+            </div>
+            <p className="text-2xl font-bold text-amber-600">
+              {revenueSummary ? formatCurrency(revenueSummary.pending) : "—"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Stripe connection */}
+      <div className="space-y-3">
+        <p className="text-sm font-semibold flex items-center gap-2">
+          <Zap className="h-4 w-4 text-primary" /> Stripe
+        </p>
         <StripeConnectionBanner
           status={stripeStatus}
           onConnect={() => { setStripeError(null); setShowStripeModal(true); }}
           onDisconnect={() => stripeDisconnectMutation.mutate()}
         />
-      </CollapsibleSection>
+      </div>
 
-      {/* QuickBooks — coming soon */}
-      <CollapsibleSection
-        icon={<DollarSign size={18} />}
-        title="QuickBooks"
-        subtitle="Coming soon"
-        open={quickbooksOpen}
-        onToggle={() => setQuickbooksOpen((v) => !v)}
-      >
-        <div className="flex items-center gap-3 opacity-50">
-          <p className="text-sm text-muted-foreground">Accounting & invoicing integration — coming soon</p>
+      {/* Billing tasks (jobs from Operations) */}
+      {taskCount > 0 && (
+        <div className="space-y-3">
+          <p className="text-sm font-semibold flex items-center gap-2">
+            <ArrowRight className="h-4 w-4 text-primary" /> Pending Tasks
+            <span className="text-xs font-normal text-muted-foreground">{taskCount} waiting</span>
+          </p>
+          <BillingTasks
+            businessId={businessId}
+            onCreateInvoice={handleCreateInvoice}
+            onChat={handleChatAboutJob}
+          />
         </div>
-      </CollapsibleSection>
+      )}
 
       {/* Stripe Connect Modal */}
       {showStripeModal && (
@@ -920,81 +667,70 @@ export default function BillingPage() {
           </div>
         </div>
       )}
+    </div>
+  );
 
-      {/* 2. Revenue Cards — always show, dashes when no Stripe */}
-      <RevenueCards businessId={businessId} stripeConnected={stripeConnected} />
+  const invoicesContent = (
+    <div className="space-y-4">
+      {stripeConnected ? (
+        <OneTimeInvoices businessId={businessId} />
+      ) : (
+        <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+          <Receipt className="h-8 w-8 mb-2 opacity-30" />
+          <p className="text-sm">Connect Stripe to view invoices</p>
+        </div>
+      )}
+    </div>
+  );
 
-      {/* 3. Chat — Quinn (Billing Specialist) */}
-      <CollapsibleSection
-        icon={<MessageSquare size={18} />}
-        title={quinn ? `Chat — ${quinn.name}` : "Chat — Billing Specialist"}
-        subtitle={quinn ? quinn.title : undefined}
-        open={chatOpen}
-        onToggle={() => setChatOpen((v) => !v)}
-      >
-        {quinn ? (
-          <ChatSection
-            businessId={businessId}
-            employeeId={quinn.id}
-            employeeName={quinn.name}
-            prefill={chatPrefill}
-            onPrefillConsumed={() => setChatPrefill("")}
-          />
-        ) : (
-          <p className="py-4 text-sm text-muted-foreground">
-            No Billing specialist found. Create a Billing department head to enable chat.
-          </p>
-        )}
-      </CollapsibleSection>
+  const subscriptionsContent = (
+    <div className="space-y-4">
+      {stripeConnected ? (
+        <SubscriptionList businessId={businessId} />
+      ) : (
+        <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
+          <Repeat className="h-8 w-8 mb-2 opacity-30" />
+          <p className="text-sm">Connect Stripe to view recurring billing</p>
+        </div>
+      )}
+    </div>
+  );
 
-      {/* 4. Tasks — jobs sent to billing */}
-      <CollapsibleSection
-        icon={<ArrowRight size={18} />}
-        title="Tasks"
-        subtitle={`${taskCount} pending`}
-        open={tasksOpen}
-        onToggle={() => setTasksOpen((v) => !v)}
-      >
-        <BillingTasks
-          businessId={businessId}
-          onCreateInvoice={handleCreateInvoice}
-          onChat={handleChatAboutJob}
-        />
-      </CollapsibleSection>
+  const sections: DeptSection[] = [
+    {
+      id: "overview",
+      label: "Overview",
+      icon: <DollarSign />,
+      content: overviewContent,
+    },
+    {
+      id: "invoices",
+      label: "Invoices",
+      icon: <FileText />,
+      badge: unpaidCount > 0 ? unpaidCount : undefined,
+      content: invoicesContent,
+    },
+    {
+      id: "subscriptions",
+      label: "Subscriptions",
+      icon: <RefreshCw />,
+      content: subscriptionsContent,
+    },
+  ];
 
-      {/* 5. One-Time Invoices */}
-      <CollapsibleSection
-        icon={<Receipt size={18} />}
-        title="One-Time Invoices"
-        open={oneTimeOpen}
-        onToggle={() => setOneTimeOpen((v) => !v)}
-      >
-        {stripeConnected ? (
-          <OneTimeInvoices businessId={businessId} />
-        ) : (
-          <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
-            <Receipt className="h-8 w-8 mb-2 opacity-30" />
-            <p className="text-sm">Connect Stripe to view invoices</p>
-          </div>
-        )}
-      </CollapsibleSection>
-
-      {/* 6. Recurring */}
-      <CollapsibleSection
-        icon={<Repeat size={18} />}
-        title="Recurring"
-        open={recurringOpen}
-        onToggle={() => setRecurringOpen((v) => !v)}
-      >
-        {stripeConnected ? (
-          <RecurringInvoices businessId={businessId} />
-        ) : (
-          <div className="flex flex-col items-center justify-center py-6 text-muted-foreground">
-            <Repeat className="h-8 w-8 mb-2 opacity-30" />
-            <p className="text-sm">Connect Stripe to view recurring billing</p>
-          </div>
-        )}
-      </CollapsibleSection>
+  return (
+    <div className="p-6 space-y-4">
+      <PageHeader
+        title="Billing"
+        description="Invoicing, payments, and revenue tracking"
+      />
+      <DeptLayout
+        sections={sections}
+        agentName="billing"
+        businessId={businessId}
+        pendingMessage={pendingChatMessage}
+        onPendingConsumed={() => setPendingChatMessage(null)}
+      />
     </div>
   );
 }

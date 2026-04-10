@@ -1,5 +1,5 @@
 """
-Contacts Router — CRM CRUD for contacts, interactions, and phone lines.
+Contacts Router — CRM CRUD for contacts and interactions.
 
 Endpoints:
   GET    /contacts/summary                — CRM counts per status
@@ -12,11 +12,6 @@ Endpoints:
 
   GET    /contacts/{contact_id}/interactions         — list interactions
   POST   /contacts/{contact_id}/interactions         — log interaction
-
-  GET    /phone-lines                — list phone lines
-  POST   /phone-lines               — create phone line
-  PATCH  /phone-lines/{id}          — update phone line
-  DELETE /phone-lines/{id}          — delete phone line
 """
 
 import logging
@@ -33,8 +28,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import settings as app_settings
 from app.database import get_db
-from app.marketing.models import Contact, Interaction, BusinessPhoneLine
-from app.admin.services.twilio_service import twilio_service
+from app.marketing.models import Contact, Interaction
 from app.marketing.schemas.contact import (
     ContactCreate,
     ContactUpdate,
@@ -46,14 +40,10 @@ from app.marketing.schemas.contact import (
     InteractionCreate,
     InteractionOut,
     InteractionListResponse,
-    PhoneLineCreate,
-    PhoneLineUpdate,
-    PhoneLineOut,
 )
 from app.core.services.auth_service import get_current_user_id
 
 router = APIRouter(prefix="/contacts", tags=["Contacts"])
-phone_lines_router = APIRouter(prefix="/phone-lines", tags=["Phone Lines"])
 
 
 # ── Helpers ──
@@ -333,113 +323,3 @@ async def log_interaction(
     return interaction
 
 
-# ── Phone Lines (mounted separately in main.py) ──
-
-@phone_lines_router.get("", response_model=list[PhoneLineOut])
-async def list_phone_lines(
-    business_id: UUID,
-    current_user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(BusinessPhoneLine)
-        .where(BusinessPhoneLine.business_id == business_id)
-        .order_by(BusinessPhoneLine.created_at.desc())
-    )
-    return list(result.scalars().all())
-
-
-@phone_lines_router.post("", response_model=PhoneLineOut, status_code=201)
-async def create_phone_line(
-    business_id: UUID,
-    payload: PhoneLineCreate,
-    request: Request,
-    current_user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    line = BusinessPhoneLine(
-        business_id=business_id,
-        twilio_number=payload.twilio_number,
-        twilio_number_sid=payload.twilio_number_sid,
-        friendly_name=payload.friendly_name,
-        campaign_name=payload.campaign_name,
-        ad_account_id=payload.ad_account_id,
-        channel=payload.channel,
-        line_type=payload.line_type,
-        department_id=payload.department_id,
-    )
-    db.add(line)
-    await db.commit()
-    await db.refresh(line)
-
-    # Auto-configure Twilio webhook so inbound calls route to our IVR
-    if payload.twilio_number_sid:
-        try:
-            # Read webhook URL from DB (phone_settings is source of truth)
-            from app.admin.models import PhoneSettings
-            ps_result = await db.execute(
-                select(PhoneSettings.webhook_base_url).where(
-                    PhoneSettings.business_id == business_id
-                )
-            )
-            webhook_base = ps_result.scalar_one_or_none() or str(request.base_url).rstrip("/")
-            voice_url = f"{webhook_base}{app_settings.api_prefix}/twilio/voice?business_id={business_id}"
-            status_url = f"{webhook_base}{app_settings.api_prefix}/twilio/call-status?business_id={business_id}"
-            await twilio_service.configure_webhook(
-                db=db,
-                business_id=business_id,
-                number_sid=payload.twilio_number_sid,
-                voice_url=voice_url,
-                status_callback_url=status_url,
-            )
-            logger.info(f"Auto-configured webhook for {payload.twilio_number} → {voice_url}")
-        except Exception as e:
-            logger.warning(f"Failed to auto-configure webhook for {payload.twilio_number}: {e}")
-
-    return line
-
-
-@phone_lines_router.patch("/{line_id}", response_model=PhoneLineOut)
-async def update_phone_line(
-    line_id: UUID,
-    business_id: UUID,
-    payload: PhoneLineUpdate,
-    current_user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(BusinessPhoneLine).where(
-            BusinessPhoneLine.id == line_id,
-            BusinessPhoneLine.business_id == business_id,
-        )
-    )
-    line = result.scalar_one_or_none()
-    if not line:
-        raise HTTPException(status_code=404, detail="Phone line not found")
-
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(line, field, value)
-
-    await db.commit()
-    await db.refresh(line)
-    return line
-
-
-@phone_lines_router.delete("/{line_id}", status_code=204)
-async def delete_phone_line(
-    line_id: UUID,
-    business_id: UUID,
-    current_user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    result = await db.execute(
-        select(BusinessPhoneLine).where(
-            BusinessPhoneLine.id == line_id,
-            BusinessPhoneLine.business_id == business_id,
-        )
-    )
-    line = result.scalar_one_or_none()
-    if not line:
-        raise HTTPException(status_code=404, detail="Phone line not found")
-    await db.delete(line)
-    await db.commit()

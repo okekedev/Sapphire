@@ -16,9 +16,9 @@ import {
   Plus,
   X,
   PhoneIncoming,
-  UserPlus,
+  Users,
+  TrendingUp,
   ClipboardList,
-  ChevronRight,
   MoreHorizontal,
   Download,
   DollarSign,
@@ -35,7 +35,7 @@ import { Input } from "@/shared/components/ui/input";
 import { PageHeader } from "@/shared/components/page-header";
 import { useAppStore } from "@/shared/stores/app-store";
 import { listEmployees, listDepartments } from "@/shared/api/organization";
-import { sendEmployeeChat, type ChatMessage } from "@/shared/api/chat";
+import { sendEmployeeChat } from "@/shared/api/chat";
 import {
   listCustomers,
   createCustomer,
@@ -47,9 +47,9 @@ import {
   listReviewed,
   type ProspectItem,
   type CustomerItem,
-  type PipelineSummary,
   type ReviewItem,
 } from "@/sales/api/sales";
+import { DeptLayout } from "@/shared/components/layout/dept-layout";
 
 // ── Helpers ──
 
@@ -63,15 +63,6 @@ function formatDuration(seconds: number | null): string {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 function formatDateShort(iso: string): string {
@@ -98,11 +89,7 @@ export default function SalesPage() {
   const businessId = business?.id;
   const queryClient = useQueryClient();
 
-  const [chatOpen, setChatOpen] = useState(false);
-  const [chatPrefill, setChatPrefill] = useState("");
-  const [callsOpen, setCallsOpen] = useState(false);
-  const [leadsOpen, setLeadsOpen] = useState(false);
-  const [reviewOpen, setReviewOpen] = useState(false);
+  const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
   const [showAddLead, setShowAddLead] = useState(false);
   const [newLead, setNewLead] = useState({ full_name: "", phone: "", email: "", notes: "" });
 
@@ -111,6 +98,7 @@ export default function SalesPage() {
   // Review section state
   const [reviewFilter, setReviewFilter] = useState<string | undefined>();
   const [reviewLimit, setReviewLimit] = useState(5);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   // ── Queries ──
 
@@ -216,49 +204,142 @@ export default function SalesPage() {
     },
   });
 
-  if (!businessId) {
-    return (
-      <div className="p-6">
-        <PageHeader title="Sales" description="Select a business to view sales pipeline" />
-      </div>
-    );
-  }
-
   const pipeline = pipelineQuery.data;
   const prospects = prospectsQuery.data?.prospects || [];
   const leads = leadsQuery.data?.customers || [];
   const reviewItems = reviewQuery.data?.items || [];
   const reviewTotal = reviewQuery.data?.total || 0;
 
-  return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <PageHeader
-          title="Sales"
-          description="Inbound call pipeline — qualify leads and convert to jobs"
-        />
+  // ── Section content ──
+
+  const leadsContent = (
+    <div className="space-y-3">
+      {prospectsQuery.isLoading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : prospects.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            No unreviewed calls
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {prospects.map((p) => (
+            <ProspectCard
+              key={p.interaction_id}
+              prospect={p}
+              onQualify={(decision, reason, leadSummary) =>
+                qualifyMutation.mutate({
+                  interactionId: p.interaction_id,
+                  decision,
+                  reason,
+                  leadSummary,
+                })
+              }
+              isPending={qualifyMutation.isPending}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const customersContent = (
+    <div className="space-y-3">
+      {/* Manual Add Lead form */}
+      <div className="flex justify-end">
         <Button
           size="sm"
           variant="ghost"
-          className="h-7 w-7 p-0"
-          onClick={async () => {
-            setIsRefreshing(true);
-            await Promise.all([
-              queryClient.invalidateQueries({ queryKey: ["sales-prospects"] }),
-              queryClient.invalidateQueries({ queryKey: ["sales-leads"] }),
-              queryClient.invalidateQueries({ queryKey: ["sales-pipeline-summary"] }),
-              queryClient.invalidateQueries({ queryKey: ["sales-review"] }),
-            ]);
-            setTimeout(() => setIsRefreshing(false), 600);
-          }}
-          disabled={isRefreshing}
-          title="Refresh"
+          className="h-7 text-xs"
+          onClick={() => setShowAddLead(!showAddLead)}
         >
-          <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+          {showAddLead ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
         </Button>
       </div>
+      {showAddLead && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase">Add Lead Manually</p>
+            <Input
+              value={newLead.full_name}
+              onChange={(e) => setNewLead({ ...newLead, full_name: e.target.value })}
+              placeholder="Name *"
+              className="text-xs h-8"
+            />
+            <Input
+              value={newLead.email}
+              onChange={(e) => setNewLead({ ...newLead, email: e.target.value })}
+              placeholder="Email"
+              className="text-xs h-8"
+            />
+            <Input
+              value={newLead.phone}
+              onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })}
+              placeholder="Phone"
+              className="text-xs h-8 font-mono"
+            />
+            <textarea
+              value={newLead.notes}
+              onChange={(e) => setNewLead({ ...newLead, notes: e.target.value })}
+              placeholder="Notes / context"
+              className="w-full rounded-md border bg-background px-3 py-2 text-xs min-h-[50px] resize-none outline-none focus:border-primary"
+            />
+            <Button
+              size="sm"
+              className="h-7 w-full text-xs"
+              onClick={() => createLeadMutation.mutate()}
+              disabled={!newLead.full_name.trim() || createLeadMutation.isPending}
+            >
+              {createLeadMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <>
+                  <Plus className="mr-1 h-3 w-3" /> Add Lead
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* ═══ PIPELINE KPIs ═══ */}
+      {leadsQuery.isLoading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : leads.length === 0 && !showAddLead ? (
+        <Card>
+          <CardContent className="py-8 text-center text-sm text-muted-foreground">
+            No active leads
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {leads.map((lead) => (
+            <LeadCard
+              key={lead.id}
+              lead={lead}
+              businessId={businessId!}
+              employeeId={jordan?.id ?? ""}
+              onConvert={(title, description, estimate) =>
+                convertMutation.mutate({ contactId: lead.id, title, description, estimate })
+              }
+              onUpdateNotes={(notes) =>
+                updateNotesMutation.mutate({ contactId: lead.id, notes })
+              }
+              isPending={convertMutation.isPending || updateNotesMutation.isPending}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const pipelineContent = (
+    <div className="space-y-6">
+      {/* KPI cards */}
       <div className="grid grid-cols-3 gap-4">
         <Card>
           <CardContent className="p-4">
@@ -286,448 +367,169 @@ export default function SalesPage() {
         </Card>
       </div>
 
-      {/* ═══ CHAT — JORDAN ═══ */}
-      <CollapsibleSection
-        icon={<MessageSquare size={18} />}
-        title={jordan ? `Chat — ${jordan.name}` : "Chat — Sales Director"}
-        subtitle={jordan ? jordan.title : undefined}
-        open={chatOpen}
-        onToggle={() => setChatOpen((v) => !v)}
-      >
-        {jordan ? (
-          <ChatSection
-            businessId={businessId}
-            employeeId={jordan.id}
-            employeeName={jordan.name}
-            prefill={chatPrefill}
-            onPrefillConsumed={() => setChatPrefill("")}
-          />
-        ) : (
-          <p className="py-4 text-sm text-muted-foreground">
-            No Sales director found. Create a Sales department head to enable chat.
-          </p>
-        )}
-      </CollapsibleSection>
+      {/* Review — historical decisions */}
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setReviewOpen((v) => !v)}
+          className="flex items-center gap-2 text-sm font-semibold text-foreground hover:text-primary transition-colors"
+        >
+          <ClipboardList className="h-4 w-4" />
+          Review
+          <span className="text-xs font-normal text-muted-foreground">{reviewTotal} reviewed</span>
+          <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", reviewOpen && "rotate-180")} />
+        </button>
 
-      {/* ═══ CALLS — UNREVIEWED INBOUND ═══ */}
-      <CollapsibleSection
-        icon={<Phone size={18} />}
-        title="Calls"
-        subtitle={`${prospects.length} unreviewed`}
-        open={callsOpen}
-        onToggle={() => setCallsOpen((v) => !v)}
-      >
-        <div className="space-y-3">
-          {prospectsQuery.isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : prospects.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                No unreviewed calls
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {prospects.map((p) => (
-                <ProspectCard
-                  key={p.interaction_id}
-                  prospect={p}
-                  onQualify={(decision, reason, leadSummary) =>
-                    qualifyMutation.mutate({
-                      interactionId: p.interaction_id,
-                      decision,
-                      reason,
-                      leadSummary,
-                    })
-                  }
-                  isPending={qualifyMutation.isPending}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </CollapsibleSection>
-
-      {/* ═══ LEADS — QUALIFIED PROSPECTS ═══ */}
-      <CollapsibleSection
-        icon={<User size={18} />}
-        title="Leads"
-        subtitle={`${leads.length} active`}
-        open={leadsOpen}
-        onToggle={() => setLeadsOpen((v) => !v)}
-        action={
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 text-xs"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowAddLead(!showAddLead);
-            }}
-          >
-            {showAddLead ? <X className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
-          </Button>
-        }
-      >
-        <div className="space-y-3">
-          {/* Manual Add Lead form */}
-          {showAddLead && (
-            <Card>
-              <CardContent className="p-4 space-y-3">
-                <p className="text-[11px] font-semibold text-muted-foreground uppercase">Add Lead Manually</p>
-                <Input
-                  value={newLead.full_name}
-                  onChange={(e) => setNewLead({ ...newLead, full_name: e.target.value })}
-                  placeholder="Name *"
-                  className="text-xs h-8"
-                />
-                <Input
-                  value={newLead.email}
-                  onChange={(e) => setNewLead({ ...newLead, email: e.target.value })}
-                  placeholder="Email"
-                  className="text-xs h-8"
-                />
-                <Input
-                  value={newLead.phone}
-                  onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })}
-                  placeholder="Phone"
-                  className="text-xs h-8 font-mono"
-                />
-                <textarea
-                  value={newLead.notes}
-                  onChange={(e) => setNewLead({ ...newLead, notes: e.target.value })}
-                  placeholder="Notes / context"
-                  className="w-full rounded-md border bg-background px-3 py-2 text-xs min-h-[50px] resize-none outline-none focus:border-primary"
-                />
-                <Button
-                  size="sm"
-                  className="h-7 w-full text-xs"
-                  onClick={() => createLeadMutation.mutate()}
-                  disabled={!newLead.full_name.trim() || createLeadMutation.isPending}
-                >
-                  {createLeadMutation.isPending ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    <>
-                      <Plus className="mr-1 h-3 w-3" /> Add Lead
-                    </>
-                  )}
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {leadsQuery.isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : leads.length === 0 && !showAddLead ? (
-            <Card>
-              <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                No active leads
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              {leads.map((lead) => (
-                <LeadCard
-                  key={lead.id}
-                  lead={lead}
-                  businessId={businessId!}
-                  employeeId={jordan?.id ?? ""}
-                  onConvert={(title, description, estimate) =>
-                    convertMutation.mutate({ contactId: lead.id, title, description, estimate })
-                  }
-                  onUpdateNotes={(notes) =>
-                    updateNotesMutation.mutate({ contactId: lead.id, notes })
-                  }
-                  isPending={convertMutation.isPending || updateNotesMutation.isPending}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </CollapsibleSection>
-
-      {/* ═══ REVIEW — HISTORICAL DECISIONS ═══ */}
-      <CollapsibleSection
-        icon={<ClipboardList size={18} />}
-        title="Review"
-        subtitle={`${reviewTotal} reviewed`}
-        open={reviewOpen}
-        onToggle={() => setReviewOpen((v) => !v)}
-      >
-        <div className="space-y-4">
-          {/* Filter pills + Export */}
-          <div className="flex items-center justify-between">
-            <div className="flex gap-1.5">
-              {[
-                { key: undefined, label: "All" },
-                { key: "converted", label: "Converted" },
-                { key: "lead", label: "Leads" },
-                { key: "other", label: "No Lead" },
-                { key: "no_conversion", label: "No Conversion" },
-              ].map((f) => (
-                <button
-                  key={f.key || "all"}
-                  onClick={() => { setReviewFilter(f.key); setReviewLimit(5); }}
-                  className={cn(
-                    "rounded-md px-2.5 py-1 text-[11px] font-medium transition",
-                    reviewFilter === f.key
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-7 text-xs"
-              onClick={() => exportReviewCSV(reviewItems)}
-              disabled={reviewItems.length === 0}
-            >
-              <Download className="mr-1.5 h-3 w-3" /> Export CSV
-            </Button>
-          </div>
-
-          {/* Review table */}
-          {reviewQuery.isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : reviewItems.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              No reviewed calls yet
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
-                    <th className="px-3 py-2 text-left">Name</th>
-                    <th className="px-3 py-2 text-left">Phone</th>
-                    <th className="px-3 py-2 text-left">Call Outcome</th>
-                    <th className="px-3 py-2 text-left">Lead Outcome</th>
-                    <th className="px-3 py-2 text-left">Customer</th>
-                    <th className="px-3 py-2 text-left">Context</th>
-                    <th className="px-3 py-2 text-left">Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reviewItems.map((item) => (
-                    <ReviewRow key={item.interaction_id} item={item} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Load more */}
-          {reviewItems.length < reviewTotal && (
-            <div className="flex justify-center">
+        {reviewOpen && (
+          <div className="space-y-4">
+            {/* Filter pills + Export */}
+            <div className="flex items-center justify-between">
+              <div className="flex gap-1.5">
+                {[
+                  { key: undefined, label: "All" },
+                  { key: "converted", label: "Converted" },
+                  { key: "lead", label: "Leads" },
+                  { key: "other", label: "No Lead" },
+                  { key: "no_conversion", label: "No Conversion" },
+                ].map((f) => (
+                  <button
+                    key={f.key || "all"}
+                    onClick={() => { setReviewFilter(f.key); setReviewLimit(5); }}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-[11px] font-medium transition",
+                      reviewFilter === f.key
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted",
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
               <Button
                 size="sm"
                 variant="outline"
-                className="text-xs"
-                onClick={() => setReviewLimit((prev) => prev + 10)}
-                disabled={reviewQuery.isFetching}
+                className="h-7 text-xs"
+                onClick={() => exportReviewCSV(reviewItems)}
+                disabled={reviewItems.length === 0}
               >
-                {reviewQuery.isFetching ? (
-                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                ) : (
-                  <MoreHorizontal className="mr-1.5 h-3 w-3" />
-                )}
-                Load more ({reviewTotal - reviewItems.length} remaining)
+                <Download className="mr-1.5 h-3 w-3" /> Export CSV
               </Button>
             </div>
-          )}
-        </div>
-      </CollapsibleSection>
-    </div>
-  );
-}
 
-// ── Collapsible Section ──
-
-function CollapsibleSection({
-  icon,
-  title,
-  subtitle,
-  open,
-  onToggle,
-  action,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  open: boolean;
-  onToggle: () => void;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-muted/50"
-      >
-        <span className="flex items-center gap-2.5">
-          <span className="text-primary">{icon}</span>
-          <span className="font-semibold">{title}</span>
-          {subtitle && (
-            <span className="text-xs text-muted-foreground">{subtitle}</span>
-          )}
-        </span>
-        <span className="flex items-center gap-2">
-          {action}
-          <ChevronDown
-            size={16}
-            className={cn(
-              "text-muted-foreground transition-transform duration-200",
-              open && "rotate-180",
+            {/* Review table */}
+            {reviewQuery.isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : reviewItems.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No reviewed calls yet
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
+                      <th className="px-3 py-2 text-left">Name</th>
+                      <th className="px-3 py-2 text-left">Phone</th>
+                      <th className="px-3 py-2 text-left">Call Outcome</th>
+                      <th className="px-3 py-2 text-left">Lead Outcome</th>
+                      <th className="px-3 py-2 text-left">Customer</th>
+                      <th className="px-3 py-2 text-left">Context</th>
+                      <th className="px-3 py-2 text-left">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {reviewItems.map((item) => (
+                      <ReviewRow key={item.interaction_id} item={item} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          />
-        </span>
-      </button>
-      {open && <div className="border-t border-border px-5 py-5">{children}</div>}
-    </div>
-  );
-}
 
-// ── Chat Section (with prefill support) ──
-
-function ChatSection({
-  businessId,
-  employeeId,
-  employeeName,
-  prefill,
-  onPrefillConsumed,
-}: {
-  businessId: string;
-  employeeId: string;
-  employeeName: string;
-  prefill?: string;
-  onPrefillConsumed?: () => void;
-}) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  // Handle prefill from pipeline cards
-  useEffect(() => {
-    if (prefill) {
-      setInput(prefill);
-      onPrefillConsumed?.();
-    }
-  }, [prefill, onPrefillConsumed]);
-
-  const mutation = useMutation({
-    mutationFn: (userMessage: string) =>
-      sendEmployeeChat({
-        business_id: businessId,
-        employee_id: employeeId,
-        messages,
-        user_message: userMessage,
-      }),
-    onSuccess: (data, userMessage) => {
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: userMessage },
-        { role: "assistant", content: data.content },
-      ]);
-    },
-  });
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, mutation.isPending]);
-
-  const handleSend = () => {
-    const trimmed = input.trim();
-    if (!trimmed || mutation.isPending) return;
-    setInput("");
-    mutation.mutate(trimmed);
-  };
-
-  return (
-    <div className="flex flex-col">
-      <div ref={scrollRef} className="max-h-96 min-h-[200px] overflow-y-auto space-y-3 mb-4">
-        {messages.length === 0 && !mutation.isPending && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <MessageSquare size={20} className="text-primary" />
-            </div>
-            <p className="text-sm font-medium">Chat with {employeeName}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Discuss leads, get recommendations, or ask about pipeline strategy.
-            </p>
-          </div>
-        )}
-
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex",
-              msg.role === "user" ? "justify-end" : "justify-start",
+            {/* Load more */}
+            {reviewItems.length < reviewTotal && (
+              <div className="flex justify-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={() => setReviewLimit((prev) => prev + 10)}
+                  disabled={reviewQuery.isFetching}
+                >
+                  {reviewQuery.isFetching ? (
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                  ) : (
+                    <MoreHorizontal className="mr-1.5 h-3 w-3" />
+                  )}
+                  Load more ({reviewTotal - reviewItems.length} remaining)
+                </Button>
+              </div>
             )}
-          >
-            <div
-              className={cn(
-                "max-w-[80%] rounded-lg px-4 py-2.5 text-sm leading-relaxed",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted",
-              )}
-            >
-              {msg.role === "assistant" && (
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {employeeName}
-                </p>
-              )}
-              {msg.role === "assistant" ? (
-                <MarkdownMessage content={msg.content} />
-              ) : (
-                <p>{msg.content}</p>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {mutation.isPending && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-3">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span className="text-xs text-muted-foreground">Thinking...</span>
-            </div>
           </div>
         )}
       </div>
+    </div>
+  );
 
-      <div className="flex gap-2">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          placeholder={`Ask ${employeeName}...`}
-          className="text-sm"
-          disabled={mutation.isPending}
+  return (
+    <div className="space-y-4 p-6">
+      <div className="flex items-center justify-between">
+        <PageHeader
+          title="Sales"
+          description="Inbound call pipeline — qualify leads and convert to jobs"
         />
         <Button
           size="sm"
-          onClick={handleSend}
-          disabled={!input.trim() || mutation.isPending}
+          variant="ghost"
+          className="h-7 w-7 p-0"
+          onClick={async () => {
+            setIsRefreshing(true);
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["sales-prospects"] }),
+              queryClient.invalidateQueries({ queryKey: ["sales-leads"] }),
+              queryClient.invalidateQueries({ queryKey: ["sales-pipeline-summary"] }),
+              queryClient.invalidateQueries({ queryKey: ["sales-review"] }),
+            ]);
+            setTimeout(() => setIsRefreshing(false), 600);
+          }}
+          disabled={isRefreshing}
+          title="Refresh"
         >
-          <Send className="h-3.5 w-3.5" />
+          <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
         </Button>
       </div>
+
+      <DeptLayout
+        sections={[
+          {
+            id: "leads",
+            label: "Leads",
+            icon: <PhoneIncoming />,
+            badge: prospects.length > 0 ? prospects.length : undefined,
+            content: leadsContent,
+          },
+          {
+            id: "customers",
+            label: "Customers",
+            icon: <Users />,
+            badge: leads.length > 0 ? leads.length : undefined,
+            content: customersContent,
+          },
+          {
+            id: "pipeline",
+            label: "Pipeline",
+            icon: <TrendingUp />,
+            content: pipelineContent,
+          },
+        ]}
+        agentName="sales"
+        businessId={businessId}
+        pendingMessage={pendingChatMessage}
+        onPendingConsumed={() => setPendingChatMessage(null)}
+      />
     </div>
   );
 }

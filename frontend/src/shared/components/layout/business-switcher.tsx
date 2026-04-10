@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Plus, Building2, Check } from "lucide-react";
+import { Menu, Plus, Building2, Check } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { useAppStore } from "@/shared/stores/app-store";
@@ -59,18 +59,15 @@ export function BusinessSwitcher() {
       {/* Trigger */}
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium hover:bg-accent transition-colors"
+        className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-accent transition-colors"
+        title="Switch business"
       >
-        <Building2 className="h-4 w-4 text-muted-foreground" />
-        <span className="max-w-[180px] truncate">
-          {activeBusiness?.name ?? "Select Business"}
-        </span>
-        <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground transition-transform", open && "rotate-180")} />
+        <Menu className="h-4 w-4" />
       </button>
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-72 rounded-lg border border-border bg-card shadow-lg">
+        <div className="absolute right-0 top-full z-50 mt-1 w-72 rounded-lg border border-border bg-card shadow-lg">
           {/* Business list */}
           <div className="max-h-48 overflow-y-auto p-1">
             {businesses.map((biz) => (

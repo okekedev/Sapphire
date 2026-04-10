@@ -54,5 +54,21 @@ requirements.lock
 # Server log
 server.log
 
+# Azure Functions
+local.settings.json
+
 # Claude Code
 .claude/
+
+# Private keys
+*.pem
+*.key
+
+# Playwright
+.playwright-mcp/
+
+# Screenshots / test artifacts
+*.png
+audit-*.png
+screenshot-*.png
+test-*.png

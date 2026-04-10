@@ -31,26 +31,8 @@ export async function updateBusiness(
 // ── Company Profile (predefined columns on businesses table) ──
 
 export interface CompanyProfile {
-  description: string | null;
-  services: string | null;
-  target_audience: string | null;
-  online_presence: string | null;
-  brand_voice: string | null;
-  goals: string | null;
-  competitive_landscape: string | null;
-  profile_source: string | null;
+  narrative: string | null;
 }
-
-/** The predefined profile fields in display order. */
-export const PROFILE_FIELDS: { key: keyof CompanyProfile; label: string }[] = [
-  { key: "description", label: "About" },
-  { key: "services", label: "Services & Products" },
-  { key: "target_audience", label: "Target Audience" },
-  { key: "online_presence", label: "Online Presence" },
-  { key: "brand_voice", label: "Brand Voice & Tone" },
-  { key: "goals", label: "Goals & Priorities" },
-  { key: "competitive_landscape", label: "Competitive Landscape" },
-];
 
 export async function getCompanyProfile(
   id: string,

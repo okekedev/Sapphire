@@ -54,37 +54,6 @@ export interface CampaignSummaryItem {
   avg_duration_s: number;
 }
 
-export interface DepartmentAttribution {
-  department: string;
-  call_count: number;
-}
-
-export interface PhoneLineSummary {
-  id: string | null;
-  tracking_number: string;
-  twilio_number_sid: string | null;
-  friendly_name: string | null;
-  campaign_name?: string;
-  channel: string | null;
-  line_type: string;
-  shaken_stir_status: string; // "unverified" | "pending" | "verified"
-  total_calls: number;
-  completed_count: number;
-  followup_count: number;
-  dropped_count: number;
-  avg_duration_s: number;
-  department_breakdown: DepartmentAttribution[];
-}
-
-export async function verifyPhoneLine(
-  businessId: string,
-  lineId: string,
-): Promise<{ status: string; trust_product_status: string; phone_line_id: string; twilio_number: string }> {
-  const res = await client.post(`/tracking-routing/phone-lines/${lineId}/verify`, null, {
-    params: { business_id: businessId },
-  });
-  return res.data;
-}
 
 // ── API calls ──
 
@@ -183,15 +152,6 @@ export async function getCampaignSummary(
   return res.data;
 }
 
-export async function getPhoneLines(
-  businessId: string,
-): Promise<PhoneLineSummary[]> {
-  const res = await client.get("/tracking-routing/tracking-number-summary", {
-    params: { business_id: businessId },
-  });
-  return res.data;
-}
-
 // ── Phone Settings ──
 
 export interface DepartmentRoutingRule {
@@ -275,35 +235,3 @@ export async function testGreetingCall(
   return res.data;
 }
 
-// ── SHAKEN/STIR Trust Hub ──
-
-export interface ShakenStirStatus {
-  has_customer_profile: boolean;
-  customer_profile_status: string | null;
-  has_trust_product: boolean;
-  trust_product_status: string | null;
-  trust_product_sid: string | null;
-  assigned_number_sids: string[];
-  ready: boolean;
-  error?: string;
-}
-
-export async function getShakenStirStatus(
-  businessId: string,
-): Promise<ShakenStirStatus> {
-  const res = await client.get("/tracking-routing/shaken-stir/status", {
-    params: { business_id: businessId },
-  });
-  return res.data;
-}
-
-export async function setupShakenStir(
-  businessId: string,
-): Promise<ShakenStirStatus & { actions?: string[] }> {
-  const res = await client.post(
-    "/tracking-routing/shaken-stir/setup",
-    {},
-    { params: { business_id: businessId } },
-  );
-  return res.data;
-}

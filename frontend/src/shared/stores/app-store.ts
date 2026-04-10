@@ -14,11 +14,7 @@ interface AppState {
 
   // Business
   activeBusiness: Business | null;
-  businesses: Business[];
   setActiveBusiness: (biz: Business) => void;
-  setBusinesses: (list: Business[]) => void;
-  showBusinessModal: boolean;
-  setShowBusinessModal: (open: boolean) => void;
   /** null = all tabs (owner). string[] = specific tabs the member can see. */
   allowedTabs: string[] | null;
   setAllowedTabs: (tabs: string[] | null) => void;
@@ -43,27 +39,12 @@ export const useAppStore = create<AppState>((set) => ({
   logout: () => {
     localStorage.removeItem("auth-token");
     localStorage.removeItem("refresh-token");
-    localStorage.removeItem("current-business-id");
-    set({
-      accessToken: null,
-      refreshToken: null,
-      user: null,
-      activeBusiness: null,
-      businesses: [],
-      allowedTabs: null,
-    });
+    set({ accessToken: null, refreshToken: null, user: null, activeBusiness: null, allowedTabs: null });
   },
 
   // Business
   activeBusiness: null,
-  businesses: [],
-  setActiveBusiness: (biz) => {
-    localStorage.setItem("current-business-id", biz.id);
-    set({ activeBusiness: biz });
-  },
-  setBusinesses: (list) => set({ businesses: list }),
-  showBusinessModal: false,
-  setShowBusinessModal: (open) => set({ showBusinessModal: open }),
+  setActiveBusiness: (biz) => set({ activeBusiness: biz }),
   allowedTabs: null,
   setAllowedTabs: (tabs) => set({ allowedTabs: tabs }),
 

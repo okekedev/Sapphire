@@ -70,23 +70,8 @@ class OpenAIServiceNotReady(OpenAIServiceError):
 # ── Helper ───────────────────────────────────────────────────────────────────
 
 def build_profile_context(business) -> str:
-    """Build a profile context string from a Business object's dedicated columns."""
-    parts = []
-    if business.description:
-        parts.append(f"## About\n{business.description}")
-    if business.services:
-        parts.append(f"## Services & Products\n{business.services}")
-    if business.target_audience:
-        parts.append(f"## Target Audience\n{business.target_audience}")
-    if business.online_presence:
-        parts.append(f"## Online Presence\n{business.online_presence}")
-    if business.brand_voice:
-        parts.append(f"## Brand Voice & Tone\n{business.brand_voice}")
-    if business.goals:
-        parts.append(f"## Goals & Priorities\n{business.goals}")
-    if business.competitive_landscape:
-        parts.append(f"## Competitive Landscape\n{business.competitive_landscape}")
-    return "\n\n".join(parts)
+    """Return the business narrative for use as AI context."""
+    return getattr(business, "narrative", None) or ""
 
 
 # ── Service ───────────────────────────────────────────────────────────────────
@@ -261,7 +246,7 @@ curl -s "http://localhost:8000/api/v1/tracking-routing/settings?business_id={bid
 ### Direct Database Access
 
 ```bash
-psql "{db_url}" -c "SELECT id, twilio_number, line_type FROM business_phone_lines WHERE business_id='{bid}';"
+psql "{db_url}" -c "SELECT phone_number, line_type, label FROM phone_lines WHERE business_id='{bid}';"
 ```
 
 ### Rules

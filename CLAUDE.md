@@ -6,11 +6,9 @@ Department-centric AI automation platform. Users interact directly with departme
 
 ```bash
 make setup && source venv/bin/activate
-make server        # Backend :8000 — must be a clean terminal (NOT inside Claude Code)
+make server        # Backend :8000 (Azure Functions) — must be a clean terminal
 cd frontend && npm run dev  # Frontend :5173
 ```
-
-Backend calls `claude --print` as a subprocess — fails if `CLAUDECODE=1` is set.
 
 ## Code Layout
 

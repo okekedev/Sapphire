@@ -513,14 +513,6 @@ export default function PaymentsPage() {
     enabled: !!businessId,
   });
 
-  if (!businessId) {
-    return (
-      <div className="flex flex-col h-full items-center justify-center gap-2 text-muted-foreground">
-        <DollarSign className="h-8 w-8" />
-        <p className="text-sm">No business selected</p>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col gap-6">

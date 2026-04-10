@@ -4,15 +4,7 @@ export interface Business {
   website: string | null;
   industry: string | null;
   plan: string;
-  // Company profile — predefined columns
-  description: string | null;
-  services: string | null;
-  target_audience: string | null;
-  online_presence: string | null;
-  brand_voice: string | null;
-  goals: string | null;
-  competitive_landscape: string | null;
-  profile_source: string | null;
+  narrative: string | null;
   created_at: string;
 }
 

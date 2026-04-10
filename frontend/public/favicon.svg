@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Rounded square background -->
+  <rect width="32" height="32" rx="7" fill="#2563eb"/>
+  <!-- Building2 icon (simplified, centered) -->
+  <g transform="translate(6, 5)" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- Main building -->
+    <path d="M3 22V8l7-5 7 5v14H3z"/>
+    <!-- Door -->
+    <rect x="8" y="15" width="4" height="7" rx="0.5"/>
+    <!-- Windows -->
+    <rect x="4.5" y="10" width="2.5" height="2.5" rx="0.3"/>
+    <rect x="10" y="10" width="2.5" height="2.5" rx="0.3"/>
+    <!-- Right wing -->
+    <path d="M17 22v-8l3-2 3 2v8"/>
+  </g>
+</svg>

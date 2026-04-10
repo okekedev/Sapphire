@@ -19,27 +19,12 @@ class BusinessUpdate(BaseModel):
 
 
 class CompanyProfileInput(BaseModel):
-    """Structured company profile — predefined fields synced with DB columns."""
-    description: str | None = None
-    services: str | None = None
-    target_audience: str | None = None
-    online_presence: str | None = None
-    brand_voice: str | None = None
-    goals: str | None = None
-    competitive_landscape: str | None = None
+    narrative: str | None = None
     source: str | None = None  # onboarding | manual_edit
 
 
 class CompanyProfileOut(BaseModel):
-    """Company profile response — maps 1:1 with DB columns."""
-    description: str | None = None
-    services: str | None = None
-    target_audience: str | None = None
-    online_presence: str | None = None
-    brand_voice: str | None = None
-    goals: str | None = None
-    competitive_landscape: str | None = None
-    profile_source: str | None = None
+    narrative: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -50,15 +35,7 @@ class BusinessOut(BaseModel):
     website: str | None
     industry: str | None
     plan: str
-    # Profile fields inline
-    description: str | None = None
-    services: str | None = None
-    target_audience: str | None = None
-    online_presence: str | None = None
-    brand_voice: str | None = None
-    goals: str | None = None
-    competitive_landscape: str | None = None
-    profile_source: str | None = None
+    narrative: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}

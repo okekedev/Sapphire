@@ -27,7 +27,9 @@ from app.core.models.business import Business
 from app.core.models.conversation import Conversation, ConversationMessage
 from app.core.models.organization import Employee
 from app.core.services.auth_service import get_current_user_id
-from app.core.services.anthropic_service import claude_cli, ClaudeCliError, ClaudeCliNotReady, ClaudeCliTokenExpired
+from app.core.services.foundry_service import foundry_service, FoundryServiceError, FoundryAgentNotFound
+from app.core.services.openai_service import openai_service, OpenAIServiceError
+from app.core.services.openai_service import build_profile_context
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,22 @@ class ChatResponse(BaseModel):
     error: Optional[str] = None
     auth_error: bool = False
     auth_error_type: Optional[str] = None  # "token_expired" | "not_connected"
+
+
+# ── Agent Chat Schemas ──
+
+
+class AgentChatRequest(BaseModel):
+    business_id: UUID
+    agent: str  # "admin" | "billing" | "marketing" | "operations" | "sales" | "james"
+    message: str = Field(..., min_length=1, max_length=5000)
+    thread_id: Optional[str] = None
+
+
+class AgentChatResponse(BaseModel):
+    content: str
+    thread_id: Optional[str] = None
+    error: Optional[str] = None
 
 
 # ── Conversation List/Detail Schemas ──
@@ -111,6 +129,57 @@ def _generate_title(user_message: str) -> str:
     if len(clean) <= 60:
         return clean
     return clean[:57] + "..."
+
+
+# ── Agent Chat Endpoint ──
+
+
+@router.post("/agent", response_model=AgentChatResponse)
+async def chat_with_agent(
+    payload: AgentChatRequest,
+    current_user_id: UUID = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Chat with a Foundry department agent.
+
+    Agents are looked up by name from Azure AI Foundry directly.
+    Threads persist across calls when thread_id is provided.
+    """
+    # Verify business
+    stmt = select(Business).where(Business.id == payload.business_id)
+    business = (await db.execute(stmt)).scalar_one_or_none()
+    if not business:
+        raise HTTPException(status_code=404, detail="Business not found")
+
+    # Build business context from profile
+    profile_ctx = build_profile_context(business)
+    business_context = (
+        f"Business: {business.name}\n\n{profile_ctx}"
+        if profile_ctx
+        else f"Business: {business.name}"
+    )
+
+    try:
+        content, thread_id = await foundry_service.chat(
+            agent_name=payload.agent,
+            message=payload.message,
+            business_context=business_context,
+            thread_id=payload.thread_id,
+            business_id=str(payload.business_id),
+        )
+        return AgentChatResponse(content=content, thread_id=thread_id)
+    except FoundryAgentNotFound:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Agent '{payload.agent}' not found. Run deploy_agents.py first.",
+        )
+    except FoundryServiceError as e:
+        logger.error(f"Agent chat failed: {e}")
+        return AgentChatResponse(
+            content="I'm having trouble connecting. Please try again.",
+            error=str(e),
+        )
 
 
 # ── Chat Endpoint ──
@@ -167,7 +236,6 @@ async def send_chat_message(
     db.add(user_msg)
 
     # Build assistant's system prompt with business context
-    from app.core.services.anthropic_service import build_profile_context
     profile_content = build_profile_context(business) or None
 
     system_context = _build_assistant_context(business, profile_content)
@@ -181,11 +249,10 @@ async def send_chat_message(
     full_message = "\n\n".join(conversation_parts)
 
     try:
-        response = await claude_cli.call_assistant(
-            business_id=payload.business_id,
+        response = await openai_service._call_model(
+            system_prompt=system_context,
             message=full_message,
-            extra_context=system_context,
-            db=db,
+            label="Chat",
         )
 
         # Save assistant message
@@ -206,7 +273,7 @@ async def send_chat_message(
             conversation_id=conversation.id,
         )
 
-    except ClaudeCliError as e:
+    except OpenAIServiceError as e:
         logger.error(f"Chat failed for business {payload.business_id}: {e}")
 
         error_msg = ConversationMessage(
@@ -251,7 +318,7 @@ async def chat_with_employee(
     Used by department page chat features.
 
     Department heads (is_head=True) get platform tool access — they can
-    provision Twilio numbers, update phone settings, call external APIs, etc.
+    provision phone numbers, update phone settings, call external APIs, etc.
     Regular employees get text-only chat.
     """
     # Load the employee
@@ -269,41 +336,15 @@ async def chat_with_employee(
 
     system_prompt = _fresh_system_prompt(emp)
 
-    # Department heads get platform tools for managing phone system, APIs, etc.
-    use_platform_tools = bool(emp.is_head)
-
-    if use_platform_tools:
-        system_prompt += (
-            "\n\n## Direct Chat Mode\n"
-            "You are chatting directly with the business owner. "
-            "You have platform tool access (Bash, WebSearch) — use them to execute actions directly. "
-            "Just do the work yourself using the API tools provided."
-        )
-
     try:
-        response = await claude_cli.chat(
+        response = await openai_service._call_model(
             system_prompt=system_prompt,
             message=full_message,
-            db=db,
-            business_id=payload.business_id,
-            platform_tools=use_platform_tools,
+            label=f"Employee/{emp.name}",
+            model=getattr(emp, "model_tier", "haiku"),
         )
-
-        return EmployeeChatResponse(
-            content=response,
-        )
-
-    except ClaudeCliTokenExpired as e:
-        return EmployeeChatResponse(
-            content="Your Claude connection has expired. Please reconnect in Connections.",
-            error=str(e),
-        )
-    except ClaudeCliNotReady as e:
-        return EmployeeChatResponse(
-            content="Claude CLI isn't connected yet. Please connect Claude first.",
-            error=str(e),
-        )
-    except ClaudeCliError as e:
+        return EmployeeChatResponse(content=response)
+    except OpenAIServiceError as e:
         logger.error(f"Employee chat error for {emp.name}: {e}")
         return EmployeeChatResponse(
             content="Something went wrong. Please try again.",

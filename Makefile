@@ -7,13 +7,8 @@ PYTHON = python3
 VENV = venv
 PIP = pip
 PY = python
-UVICORN = uvicorn
-APP = app.main:app
-PORT = 8000
-# NOTE: Run `source venv/bin/activate` before using make targets,
-# or use system Python with all deps installed.
 
-.PHONY: help setup install server test logs stop restart clean
+.PHONY: help setup install server test logs stop clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -26,12 +21,8 @@ setup: ## Full setup: create venv, install deps
 install: ## Install/update dependencies
 	$(PIP) install -r requirements.txt
 
-server: ## Start the FastAPI server (foreground with logs)
-	$(UVICORN) $(APP) --host 0.0.0.0 --port $(PORT) --log-level debug 2>&1 | tee server.log
-
-server-bg: ## Start server in background
-	nohup $(UVICORN) $(APP) --host 0.0.0.0 --port $(PORT) --log-level debug >> server.log 2>&1 &
-	@echo "Server started in background. Logs: server.log"
+server: ## Start the Azure Functions server (port 8000)
+	func start --port 8000
 
 test: ## Run unit tests (no server needed)
 	$(PY) -m pytest tests/ -v
@@ -39,10 +30,8 @@ test: ## Run unit tests (no server needed)
 logs: ## Tail the server log
 	tail -50 server.log
 
-stop: ## Stop the background server
-	@pkill -f "uvicorn $(APP)" 2>/dev/null && echo "Server stopped" || echo "No server running"
-
-restart: stop server-bg ## Restart the background server
+stop: ## Stop the server
+	@pkill -f "func start" 2>/dev/null && echo "Server stopped" || echo "No server running"
 
 clean: ## Remove caches and temp files
 	find . -type d -name __pycache__ -not -path './venv/*' -exec rm -rf {} + 2>/dev/null || true

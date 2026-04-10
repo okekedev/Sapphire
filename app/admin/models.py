@@ -1,8 +1,9 @@
-"""Admin models — PhoneSettings.
+"""Admin models — PhoneSettings, PhoneLine.
 
-PhoneSettings: Per-business mainline greeting, voice, routing, transcription config.
-Also stores Twilio A2P 10DLC SIDs (messaging_service_sid, brand_registration_sid)
-for querying campaign status via Twilio API. Registration itself is done in Twilio Console.
+PhoneSettings: Per-business IVR config (greeting, voice, routing, hours).
+PhoneLine: One row per ACS phone number. line_type = mainline | tracking | department.
+  - Inbound IVR looks up business via PhoneLine.phone_number → business_id
+  - campaign_name is stamped on Interaction.metadata_ for revenue attribution
 
 Department-level call routing (forward_number, enabled, sms_enabled) lives on the
 departments table, NOT here. See Department model in organization.py.
@@ -17,6 +18,41 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+class PhoneLine(Base):
+    """One row per ACS phone number owned by a business.
+
+    line_type:
+      - mainline   → primary business number (IVR entry point, outbound caller ID)
+      - tracking   → campaign tracking number (attribution via campaign_name)
+      - department → direct-dial line for a specific department
+    """
+    __tablename__ = "phone_lines"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("businesses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    phone_number: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
+    line_type: Mapped[str] = mapped_column(
+        String(20), nullable=False, server_default="tracking",
+    )  # "mainline" | "tracking" | "department"
+    label: Mapped[Optional[str]] = mapped_column(String(200))  # campaign name / friendly label
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"),
+    )
+
+    business = relationship("Business", foreign_keys=[business_id])
 
 
 class PhoneSettings(Base):

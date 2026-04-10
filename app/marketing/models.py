@@ -1,11 +1,11 @@
-"""CRM models: Contact, Interaction, BusinessPhoneLine.
+"""CRM models: Contact, Interaction.
 
 Contacts is the single source of truth for prospects and customers.
 customer_type is set per-interaction context: "new" on first call, "returning"
 on subsequent calls. The Contact-level customer_type reflects the latest state.
 
-BusinessPhoneLine maps Twilio phone numbers to campaigns/line types for attribution.
 Interactions log every touchpoint: calls, emails, form submits, SMS, payments.
+Phone number ownership is stored in the phone_lines table (phone_number, line_type, label).
 """
 
 import uuid
@@ -196,78 +196,6 @@ class Interaction(Base):
     # ── Relationships ──
     contact = relationship("Contact", back_populates="interactions")
     business = relationship("Business", foreign_keys=[business_id])
-
-
-class BusinessPhoneLine(Base):
-    """A Twilio phone number for the business — mainline, tracking, or department line.
-
-    DB columns (14): id, business_id, department_id, twilio_number,
-    twilio_number_sid, friendly_name, campaign_name, ad_account_id,
-    channel, line_type, active, created_at, updated_at
-    """
-    __tablename__ = "business_phone_lines"
-
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4,
-        server_default=text("gen_random_uuid()"),
-    )
-    business_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("businesses.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-
-    # Optional link to a department — one number per department for IVR routing
-    department_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("departments.id", ondelete="SET NULL"),
-        nullable=True,
-        index=True,
-    )
-
-    # The Twilio number (E.164 format, e.g. "+14155551234")
-    twilio_number: Mapped[str] = mapped_column(String(20), nullable=False)
-    twilio_number_sid: Mapped[Optional[str]] = mapped_column(String(100))
-
-    # Human-readable label (e.g. "Main Office Line", "Google Ads - Dallas")
-    friendly_name: Mapped[Optional[str]] = mapped_column(String(255))
-
-    # Campaign this number is attributed to (nullable — mainline doesn't need one)
-    campaign_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    ad_account_id: Mapped[Optional[str]] = mapped_column(String(255))
-
-    # Channel context (paid_search, organic, direct, facebook_ads, direct_mail, etc.)
-    channel: Mapped[Optional[str]] = mapped_column(String(100))
-
-    # Line type: "mainline", "tracking", or "department"
-    line_type: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="tracking", index=True,
-    )
-
-    active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="true",
-    )
-
-    # SHAKEN/STIR verification: unverified | pending | verified
-    shaken_stir_status: Mapped[str] = mapped_column(
-        String(20), nullable=False, server_default="unverified",
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("now()"),
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=text("now()"),
-        onupdate=lambda: datetime.now(timezone.utc),
-    )
-
-    # ── Relationships ──
-    business = relationship("Business", foreign_keys=[business_id])
-    department = relationship("Department", foreign_keys=[department_id])
 
 
 class MediaFile(Base):

@@ -24,15 +24,8 @@ class Business(Base):
     industry: Mapped[str | None] = mapped_column(String(100))
     plan: Mapped[str] = mapped_column(String(20), server_default="free")  # free | pro | agency
 
-    # Company profile — predefined columns populated during onboarding
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    services: Mapped[str | None] = mapped_column(Text, nullable=True)
-    target_audience: Mapped[str | None] = mapped_column(Text, nullable=True)
-    online_presence: Mapped[str | None] = mapped_column(Text, nullable=True)
-    brand_voice: Mapped[str | None] = mapped_column(Text, nullable=True)
-    goals: Mapped[str | None] = mapped_column(Text, nullable=True)
-    competitive_landscape: Mapped[str | None] = mapped_column(Text, nullable=True)
-    profile_source: Mapped[str | None] = mapped_column(String(50), nullable=True)  # onboarding | manual_edit
+    # Business narrative — single free-form description used as AI context
+    narrative: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     created_by: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=False

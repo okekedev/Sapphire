@@ -25,15 +25,13 @@ import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { PageHeader } from "@/shared/components/page-header";
 import { useAppStore } from "@/shared/stores/app-store";
-import { getPhoneLines as getRawPhoneLines, createPhoneLine } from "@/marketing/api/contacts";
 import {
   listCalls,
   dispositionCall,
   getDepartmentSummary,
   getPhoneSettings,
-  getShakenStirStatus,
-  getPhoneLines as getPhoneLineSummary,
 } from "@/marketing/api/tracking-routing";
+import { listACSNumbers, provisionPhoneLine } from "@/admin/api/acs";
 import { SettingsModal } from "@/admin/components/settings-modal";
 
 // ── Helpers ──
@@ -242,16 +240,20 @@ export default function TrackingRoutingPage() {
   const [hideDispositioned, setHideDispositioned] = useState(true);
 
   const addNumberMutation = useMutation({
-    mutationFn: (payload: { twilio_number: string; campaign_name: string; friendly_name: string; line_type: string }) =>
-      createPhoneLine(businessId!, {
-        twilio_number: payload.twilio_number,
-        campaign_name: payload.friendly_name || "Manual",
-        friendly_name: payload.friendly_name,
-        line_type: payload.line_type || "tracking",
-        channel: payload.line_type === "mainline" ? "direct" : undefined,
-      }),
+    mutationFn: (payload: { phone_number: string; campaign_name: string; friendly_name: string; line_type: string }) => {
+      // Extract area code from the phone number for ACS provisioning
+      const digits = payload.phone_number.replace(/\D/g, "");
+      // US numbers: strip leading 1, take first 3 digits as area code
+      const areaCode = digits.length === 11 && digits[0] === "1" ? digits.slice(1, 4) : digits.slice(0, 3);
+      return provisionPhoneLine(
+        businessId!,
+        areaCode,
+        payload.friendly_name || "mainline",
+        "mainline",
+      );
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["phone-lines", businessId] });
+      queryClient.invalidateQueries({ queryKey: ["acs-numbers", businessId] });
       setNewNumber("");
       setNewName("");
       setNewIsMainline(false);
@@ -270,7 +272,7 @@ export default function TrackingRoutingPage() {
     let num = newNumber.replace(/[\s\-()]/g, "");
     if (!num.startsWith("+")) num = "+1" + num;
     addNumberMutation.mutate({
-      twilio_number: num,
+      phone_number: num,
       campaign_name: newName || "Manual",
       friendly_name: newName || "",
       line_type: newIsMainline ? "mainline" : "campaign",
@@ -278,8 +280,8 @@ export default function TrackingRoutingPage() {
   };
 
   const trackingNumbers = useQuery({
-    queryKey: ["phone-lines", businessId],
-    queryFn: () => getRawPhoneLines(businessId!),
+    queryKey: ["acs-numbers", businessId],
+    queryFn: () => listACSNumbers(businessId!),
     enabled: !!businessId,
   });
 
@@ -315,28 +317,7 @@ export default function TrackingRoutingPage() {
     enabled: !!businessId,
   });
 
-  const shakenStir = useQuery({
-    queryKey: ["shaken-stir-status", businessId],
-    queryFn: () => getShakenStirStatus(businessId!),
-    enabled: !!businessId,
-  });
 
-  const phoneLineSummary = useQuery({
-    queryKey: ["phone-line-summary", businessId],
-    queryFn: () => getPhoneLineSummary(businessId!),
-    enabled: !!businessId,
-  });
-
-  // Set of verified phone number SIDs for quick lookup
-  const verifiedSids = new Set(shakenStir.data?.assigned_number_sids || []);
-
-  if (!businessId) {
-    return (
-      <div className="p-6">
-        <PageHeader title="Tracking & Routing" description="Select a business to view call routing" />
-      </div>
-    );
-  }
 
   const allNumbers = trackingNumbers.data || [];
   const mainlineNumber = allNumbers.find(n => n.active && n.line_type === "mainline");
@@ -344,7 +325,6 @@ export default function TrackingRoutingPage() {
   const calls = callLog.data?.calls || [];
   const totalCalls = callLog.data?.total || 0;
   const departments = deptSummary.data || [];
-  const phoneLines = phoneLineSummary.data || [];
   const isLoading = trackingNumbers.isLoading || callLog.isLoading;
 
   // Use configured departments from settings, fallback to defaults
@@ -396,7 +376,7 @@ export default function TrackingRoutingPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="font-semibold truncate">{tn.campaign_name}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono">{tn.twilio_number}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono">{tn.phone_number}</div>
                     </div>
                   </div>
                 ))}
@@ -420,7 +400,7 @@ export default function TrackingRoutingPage() {
                   <Phone className="mx-auto mb-1 h-6 w-6 text-primary" />
                   <p className="font-bold text-sm text-primary">Main Line</p>
                   {mainlineNumber && (
-                    <p className="text-[11px] font-mono text-primary/70 mt-0.5">{mainlineNumber.twilio_number}</p>
+                    <p className="text-[11px] font-mono text-primary/70 mt-0.5">{mainlineNumber.phone_number}</p>
                   )}
                   <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
                     <p>✓ AI greeting & name capture</p>
@@ -564,18 +544,8 @@ export default function TrackingRoutingPage() {
                           Inactive
                         </span>
                       )}
-                      {tn.twilio_number_sid && verifiedSids.has(tn.twilio_number_sid) ? (
-                        <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-[10px] font-semibold" title="SHAKEN/STIR A-level attestation — calls display as Verified">
-                          <svg className="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                          Verified
-                        </span>
-                      ) : tn.twilio_number_sid && shakenStir.data && !shakenStir.data.ready ? (
-                        <span className="inline-block rounded-full bg-amber-100 text-amber-700 px-2 py-0.5 text-[10px] font-semibold" title="SHAKEN/STIR not set up — calls may be blocked by carriers">
-                          Not Verified
-                        </span>
-                      ) : null}
                     </div>
-                    <span className="text-[11px] text-muted-foreground font-mono">{tn.twilio_number}</span>
+                    <span className="text-[11px] text-muted-foreground font-mono">{tn.phone_number}</span>
                   </div>
                   <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                     {tn.channel || "manual"}
@@ -593,21 +563,21 @@ export default function TrackingRoutingPage() {
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h2 className="text-sm font-semibold">
               Phone Line Performance
-              {phoneLines.length > 0 && (
+              {allNumbers.length > 0 && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  {phoneLines.reduce((s, t) => s + t.total_calls, 0)} total calls
+                  {totalCalls} total calls
                 </span>
               )}
             </h2>
           </div>
 
-          {phoneLineSummary.isLoading ? (
+          {trackingNumbers.isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : phoneLines.length === 0 ? (
+          ) : allNumbers.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
-              No call data yet. Calls will appear here as they come in through your phone lines.
+              No phone numbers configured. Provision a mainline number to get started.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -615,22 +585,15 @@ export default function TrackingRoutingPage() {
                 <thead>
                   <tr className="border-b bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
                     <th className="px-3 py-2 text-left">Phone Line</th>
+                    <th className="px-3 py-2 text-left">Type</th>
                     <th className="px-3 py-2 text-left">Campaign</th>
-                    <th className="px-3 py-2 text-left">Calls</th>
-                    <th className="px-3 py-2 text-left">Completed</th>
-                    <th className="px-3 py-2 text-left">Follow-Up</th>
-                    <th className="px-3 py-2 text-left">Dropped</th>
-                    <th className="px-3 py-2 text-left">Avg Duration</th>
-                    <th className="px-3 py-2 text-left">Department Attribution</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {phoneLines.map((tn) => {
-                    const maxCalls = Math.max(...phoneLines.map(t => t.total_calls), 1);
-                    const pct = (tn.total_calls / maxCalls) * 100;
-                    const formattedNumber = tn.tracking_number.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
+                  {allNumbers.map((tn) => {
+                    const formattedNumber = tn.phone_number.replace(/^\+1(\d{3})(\d{3})(\d{4})$/, "($1) $2-$3");
                     return (
-                      <tr key={tn.tracking_number} className="border-b transition hover:bg-muted/30">
+                      <tr key={tn.phone_number} className="border-b transition hover:bg-muted/30">
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2">
                             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary text-[10px]">
@@ -649,50 +612,13 @@ export default function TrackingRoutingPage() {
                             )}
                           </div>
                         </td>
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground capitalize">
+                          {tn.line_type}
+                        </td>
                         <td className="px-3 py-2.5">
                           <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${getCampaignColor(tn.channel, tn.campaign_name ?? null)}`}>
-                            {tn.campaign_name}
+                            {tn.campaign_name ?? "—"}
                           </span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold">{tn.total_calls}</span>
-                            <div className="h-1.5 w-12 rounded-full bg-muted overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-primary transition-all"
-                                style={{ width: `${pct}%` }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="font-semibold text-emerald-600">{tn.completed_count}</span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="font-semibold text-amber-600">{tn.followup_count}</span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          <span className="font-semibold text-gray-400">{tn.dropped_count}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-xs font-mono text-muted-foreground">
-                          {formatDuration(Math.round(tn.avg_duration_s))}
-                        </td>
-                        <td className="px-3 py-2.5">
-                          {tn.department_breakdown.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {tn.department_breakdown.map((d) => (
-                                <span
-                                  key={d.department}
-                                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ${getDeptColor(d.department)}`}
-                                >
-                                  {d.department}
-                                  <span className="opacity-70">{d.call_count}</span>
-                                </span>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-xs">—</span>
-                          )}
                         </td>
                       </tr>
                     );
@@ -778,7 +704,7 @@ export default function TrackingRoutingPage() {
         isOpen={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         businessId={businessId}
-        mainlineNumber={mainlineNumber?.twilio_number}
+        mainlineNumber={mainlineNumber?.phone_number}
       />
     </div>
   );

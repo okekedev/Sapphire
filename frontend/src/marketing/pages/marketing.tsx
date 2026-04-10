@@ -1,16 +1,11 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import {
-  MessageSquare,
   Link2,
   BarChart3,
-  ChevronDown,
-  Send,
-  Loader2,
   Plus,
   CheckCircle2,
-  Phone,
   ImagePlus,
   Trash2,
   PenLine,
@@ -22,15 +17,16 @@ import {
   Mail,
   Sparkles,
   UserPlus,
+  Loader2,
+  Send,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useAppStore } from "@/shared/stores/app-store";
 import { Spinner } from "@/shared/components/ui/spinner";
 import { MarkdownMessage } from "@/shared/components/ui/markdown-message";
+import { DeptLayout } from "@/shared/components/layout/dept-layout";
 
 // APIs
-import { listEmployees, listDepartments } from "@/shared/api/organization";
-import { sendEmployeeChat, type ChatMessage } from "@/shared/api/chat";
 import { listConnections, type PlatformConnection } from "@/shared/api/platforms";
 import {
   uploadMedia,
@@ -55,7 +51,6 @@ function FacebookIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-
 
 function LinkedInIcon({ className }: { className?: string }) {
   return (
@@ -115,31 +110,7 @@ export default function MarketingPage() {
   const business = useAppStore((s) => s.activeBusiness);
   const bizId = business?.id ?? "";
 
-  const [accountsOpen, setAccountsOpen] = useState(false);
-  const [studioOpen, setStudioOpen] = useState(true);
-  const [outreachOpen, setOutreachOpen] = useState(false);
-  const [chatOpen, setChatOpen] = useState(false);
-
-  // Get marketing department + head employee
-  const { data: departments } = useQuery({
-    queryKey: ["departments", bizId],
-    queryFn: () => listDepartments(bizId),
-    enabled: !!bizId,
-  });
-
-  const marketingDept = departments?.find(
-    (d) => d.name.toLowerCase() === "marketing",
-  );
-
-  const { data: allEmployees } = useQuery({
-    queryKey: ["employees", bizId],
-    queryFn: () => listEmployees({ business_id: bizId }),
-    enabled: !!bizId,
-  });
-
-  const marketingHead = allEmployees?.find(
-    (e) => e.department_id === marketingDept?.id && e.is_head,
-  );
+  const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
 
   // Posts for "last posted" dates
   const { data: postsData } = useQuery({
@@ -161,6 +132,27 @@ export default function MarketingPage() {
     }
   }
 
+  const sections = [
+    {
+      id: "content",
+      label: "Content",
+      icon: <PenLine size={14} />,
+      content: <ContentStudioSection businessId={bizId} lastPostedMap={lastPostedMap} />,
+    },
+    {
+      id: "email",
+      label: "Email",
+      icon: <Mail size={14} />,
+      content: <OutreachSection businessId={bizId} />,
+    },
+    {
+      id: "platforms",
+      label: "Platforms",
+      icon: <Link2 size={14} />,
+      content: <ConnectedAccountsSection businessId={bizId} lastPostedMap={lastPostedMap} />,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Page header */}
@@ -180,96 +172,13 @@ export default function MarketingPage() {
         </Link>
       </div>
 
-      {/* Section 1: Connected Accounts */}
-      <CollapsibleSection
-        icon={<Link2 size={18} />}
-        title="Connected Accounts"
-        open={accountsOpen}
-        onToggle={() => setAccountsOpen((v) => !v)}
-      >
-        <ConnectedAccountsSection businessId={bizId} lastPostedMap={lastPostedMap} />
-      </CollapsibleSection>
-
-      {/* Section 2: Content Studio */}
-      <CollapsibleSection
-        icon={<PenLine size={18} />}
-        title="Content Studio"
-        open={studioOpen}
-        onToggle={() => setStudioOpen((v) => !v)}
-      >
-        <ContentStudioSection businessId={bizId} lastPostedMap={lastPostedMap} />
-      </CollapsibleSection>
-
-      {/* Section 3: Email Outreach */}
-      <CollapsibleSection
-        icon={<Mail size={18} />}
-        title="Email Outreach"
-        open={outreachOpen}
-        onToggle={() => setOutreachOpen((v) => !v)}
-      >
-        <OutreachSection businessId={bizId} />
-      </CollapsibleSection>
-
-      {/* Section 4: Chat */}
-      <CollapsibleSection
-        icon={<MessageSquare size={18} />}
-        title="Chat"
-        subtitle={marketingHead ? `Talk to ${marketingHead.name}` : undefined}
-        open={chatOpen}
-        onToggle={() => setChatOpen((v) => !v)}
-      >
-        {marketingHead ? (
-          <ChatSection businessId={bizId} employeeId={marketingHead.id} employeeName={marketingHead.name} />
-        ) : (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            No marketing department head found.
-          </p>
-        )}
-      </CollapsibleSection>
-    </div>
-  );
-}
-
-// ── Collapsible Section ──
-
-function CollapsibleSection({
-  icon,
-  title,
-  subtitle,
-  open,
-  onToggle,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  open: boolean;
-  onToggle: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-border bg-card">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-5 py-4 text-left transition-colors hover:bg-muted/50"
-      >
-        <span className="flex items-center gap-2.5">
-          <span className="text-primary">{icon}</span>
-          <span className="font-semibold">{title}</span>
-          {subtitle && (
-            <span className="text-xs text-muted-foreground">{subtitle}</span>
-          )}
-        </span>
-        <ChevronDown
-          size={16}
-          className={cn(
-            "text-muted-foreground transition-transform duration-200",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-      {open && <div className="border-t border-border px-5 py-5">{children}</div>}
+      <DeptLayout
+        sections={sections}
+        agentName="marketing"
+        businessId={bizId}
+        pendingMessage={pendingChatMessage}
+        onPendingConsumed={() => setPendingChatMessage(null)}
+      />
     </div>
   );
 }
@@ -299,13 +208,13 @@ function ContentStudioSection({
     enabled: !!businessId,
   });
 
-  const { data: mediaData, isLoading: mediaLoading } = useQuery({
+  const { data: mediaData } = useQuery({
     queryKey: ["media-files", businessId],
     queryFn: () => listMedia(businessId),
     enabled: !!businessId,
   });
 
-  const { data: postsData, isLoading: postsLoading } = useQuery({
+  const { data: postsData } = useQuery({
     queryKey: ["content-posts", businessId],
     queryFn: () => listPosts(businessId),
     enabled: !!businessId,
@@ -546,7 +455,7 @@ function ContentStudioSection({
         </label>
         {connectedPlatforms.size === 0 ? (
           <p className="text-xs text-muted-foreground">
-            No connected accounts. Connect platforms in the section above.
+            No connected accounts. Connect platforms in the Platforms tab.
           </p>
         ) : (
           <div className="flex flex-wrap gap-2">
@@ -595,7 +504,7 @@ function ContentStudioSection({
           Save Draft
         </button>
         <p className="text-[10px] text-muted-foreground">
-          Use Chat below to ask the marketing head to publish your drafts.
+          Use the chat panel to ask the marketing head to publish your drafts.
         </p>
       </div>
 
@@ -660,139 +569,6 @@ function PostStatusIcon({ status }: { status: string }) {
     default:
       return <Clock size={14} className="shrink-0 text-amber-500" />;
   }
-}
-
-// ── Chat Section ──
-
-function ChatSection({
-  businessId,
-  employeeId,
-  employeeName,
-}: {
-  businessId: string;
-  employeeId: string;
-  employeeName: string;
-}) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [input, setInput] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const mutation = useMutation({
-    mutationFn: (userMessage: string) =>
-      sendEmployeeChat({
-        business_id: businessId,
-        employee_id: employeeId,
-        messages,
-        user_message: userMessage,
-      }),
-    onSuccess: (data, userMessage) => {
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", content: userMessage },
-        { role: "assistant", content: data.content },
-      ]);
-    },
-  });
-
-  useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, mutation.isPending]);
-
-  const handleSend = () => {
-    const trimmed = input.trim();
-    if (!trimmed || mutation.isPending) return;
-    setInput("");
-    mutation.mutate(trimmed);
-  };
-
-  return (
-    <div className="flex flex-col">
-      {/* Messages */}
-      <div ref={scrollRef} className="max-h-96 min-h-[200px] overflow-y-auto space-y-3 mb-4">
-        {messages.length === 0 && !mutation.isPending && (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <MessageSquare size={20} className="text-primary" />
-            </div>
-            <p className="text-sm font-medium">Chat with {employeeName}</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Ask about campaigns, SEO, content ideas, or tell them to publish your drafts.
-            </p>
-          </div>
-        )}
-
-        {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={cn(
-              "flex",
-              msg.role === "user" ? "justify-end" : "justify-start",
-            )}
-          >
-            <div
-              className={cn(
-                "max-w-[80%] rounded-lg px-4 py-2.5 text-sm leading-relaxed",
-                msg.role === "user"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted",
-              )}
-            >
-              {msg.role === "assistant" && (
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {employeeName}
-                </p>
-              )}
-              {msg.role === "assistant" ? (
-                <MarkdownMessage content={msg.content} />
-              ) : (
-                <p className="whitespace-pre-wrap">{msg.content}</p>
-              )}
-            </div>
-          </div>
-        ))}
-
-        {mutation.isPending && (
-          <div className="flex justify-start">
-            <div className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2.5">
-              <Loader2 size={14} className="animate-spin text-muted-foreground" />
-              <span className="text-xs text-muted-foreground">{employeeName} is thinking...</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Input */}
-      <div className="flex items-center gap-2 border-t border-border pt-4">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-          placeholder={`Message ${employeeName}...`}
-          disabled={mutation.isPending}
-          className="flex-1 rounded-lg border border-border bg-background px-4 py-2.5 text-sm outline-none transition-colors focus:border-primary"
-        />
-        <button
-          onClick={handleSend}
-          disabled={!input.trim() || mutation.isPending}
-          className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors",
-            input.trim() && !mutation.isPending
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-muted text-muted-foreground cursor-not-allowed",
-          )}
-        >
-          <Send size={16} />
-        </button>
-      </div>
-
-      {mutation.isError && (
-        <p className="mt-2 text-xs text-destructive">
-          {mutation.error instanceof Error ? mutation.error.message : "Failed to send message"}
-        </p>
-      )}
-    </div>
-  );
 }
 
 // ── Outreach Section ──

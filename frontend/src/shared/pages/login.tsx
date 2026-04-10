@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, Building2 } from "lucide-react";
 
 import { useAppStore } from "@/shared/stores/app-store";
 import { getMicrosoftLoginUrl } from "@/shared/api/auth";
@@ -30,11 +30,16 @@ export default function LoginPage() {
 
   return (
     <AuthLayout>
+      {/* Logo + brand */}
+      <div className="flex flex-col items-center gap-3">
+        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+          <Building2 className="h-6 w-6 text-primary-foreground" />
+        </div>
+        <p className="text-xs font-semibold tracking-widest text-primary uppercase">Sapphire</p>
+      </div>
+
       {/* Header */}
-      <div className="text-center lg:text-left">
-        <p className="mb-4 text-sm font-semibold tracking-wide text-primary lg:hidden">
-          SAPPHIRE
-        </p>
+      <div className="text-center">
         <h1 className="text-2xl font-bold sm:text-3xl">Welcome back</h1>
         <p className="mt-2 text-muted-foreground">Sign in to continue</p>
       </div>

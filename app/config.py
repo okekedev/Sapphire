@@ -58,6 +58,7 @@ class Settings(BaseSettings):
     # Redirect URI to register: http://localhost:8000/api/v1/auth/microsoft/callback
     azure_ad_tenant_id: str = ""
     azure_ad_client_id: str = ""
+    azure_ad_client_secret: str = ""  # Local dev fallback — prod uses UAMI federated assertion
     azure_ad_group_id: str = ""  # Object ID of "Sapphire Users" group; empty = skip group check
     # Redirect URI = frontend /auth/callback route (SWA serves index.html for it).
     # React reads ?code=... and calls /api/v1/auth/microsoft/exchange via fetch.
@@ -111,6 +112,12 @@ class Settings(BaseSettings):
     foundry_endpoint: str = "https://ai-sapphire-prod.cognitiveservices.azure.com"
     foundry_default_model: str = "haiku"
 
+    # ── Azure Communication Services ──
+    # Resource: acs-sapphire-prod (in rg-sapphire-prod)
+    # Auth: connection string (dev + prod); MI used for call automation only
+    acs_endpoint: str = ""
+    acs_connection_string: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
@@ -149,6 +156,7 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
         "linkedin-client-id": "linkedin_client_id",
         "linkedin-client-secret": "linkedin_client_secret",
         "azure-ad-client-id": "azure_ad_client_id",
+        "azure-ad-client-secret": "azure_ad_client_secret",
     }
     for secret_name, attr in mappings.items():
         value = kv.get(secret_name)

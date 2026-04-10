@@ -134,7 +134,7 @@ class EmailService:
         Generate a warm occasion-based outreach email (birthday, Christmas, etc.).
         Returns {"subject": "...", "body": "..."}.
         """
-        from app.core.services.anthropic_service import anthropic_service
+        from app.core.services.openai_service import openai_service as anthropic_service
 
         occasion_context = {
             "birthday": "It's their birthday. Send warm birthday wishes.",
@@ -184,7 +184,7 @@ class EmailService:
         """
         Generate an AI follow-up email draft based on conversation history.
         """
-        from app.core.services.anthropic_service import anthropic_service
+        from app.core.services.openai_service import openai_service as anthropic_service
 
         system = "You write concise, natural follow-up emails for small businesses. Return only the email body — no subject line."
         prompt = (
@@ -213,7 +213,7 @@ class EmailService:
         Summarize an email/call thread using Claude.
         Returns a concise summary of the conversation.
         """
-        from app.core.services.anthropic_service import anthropic_service
+        from app.core.services.openai_service import openai_service as anthropic_service
 
         system = "You summarize conversation threads for small business CRM. Be concise and factual."
         prompt = (

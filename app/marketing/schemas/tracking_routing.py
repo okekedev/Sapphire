@@ -65,30 +65,6 @@ class CampaignSummaryItem(BaseModel):
     avg_duration_s: float = 0
 
 
-class DepartmentAttribution(BaseModel):
-    """Calls routed to a specific department from a tracking number."""
-    department: str
-    call_count: int = 0
-
-
-class PhoneLineSummaryItem(BaseModel):
-    """One row in the Phone Line Performance report."""
-    id: Optional[str] = None  # phone line UUID
-    tracking_number: str  # E.164 phone number
-    twilio_number_sid: Optional[str] = None
-    friendly_name: Optional[str] = None
-    campaign_name: Optional[str] = None
-    channel: Optional[str] = None
-    line_type: str = "tracking"
-    shaken_stir_status: str = "unverified"  # unverified | pending | verified
-    total_calls: int = 0
-    completed_count: int = 0
-    followup_count: int = 0
-    dropped_count: int = 0
-    avg_duration_s: float = 0
-    department_breakdown: list[DepartmentAttribution] = []
-
-
 # ── Department Context Calling schemas ──
 
 

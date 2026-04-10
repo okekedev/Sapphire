@@ -65,8 +65,8 @@ export interface PhoneLine {
   id: string;
   business_id: string;
   department_id: string | null;
-  twilio_number: string;
-  twilio_number_sid: string | null;
+  phone_number: string;
+  acs_number_sid: string | null;
   friendly_name: string | null;
   campaign_name?: string;
   ad_account_id: string | null;
@@ -202,58 +202,3 @@ export async function logInteraction(
   return res.data;
 }
 
-// ── Phone Lines ──
-
-export async function getPhoneLines(
-  businessId: string,
-): Promise<PhoneLine[]> {
-  const res = await client.get("/phone-lines", {
-    params: { business_id: businessId },
-  });
-  return res.data;
-}
-
-export async function createPhoneLine(
-  businessId: string,
-  payload: {
-    twilio_number: string;
-    campaign_name?: string;
-    friendly_name?: string;
-    channel?: string;
-    ad_account_id?: string;
-    department_id?: string;
-    line_type?: string;
-  },
-): Promise<PhoneLine> {
-  const res = await client.post("/phone-lines", payload, {
-    params: { business_id: businessId },
-  });
-  return res.data;
-}
-
-export async function updatePhoneLine(
-  businessId: string,
-  phoneLineId: string,
-  payload: {
-    friendly_name?: string;
-    campaign_name?: string;
-    channel?: string;
-    line_type?: string;
-    department_id?: string | null;
-    active?: boolean;
-  },
-): Promise<PhoneLine> {
-  const res = await client.patch(`/phone-lines/${phoneLineId}`, payload, {
-    params: { business_id: businessId },
-  });
-  return res.data;
-}
-
-export async function deletePhoneLine(
-  businessId: string,
-  phoneLineId: string,
-): Promise<void> {
-  await client.delete(`/phone-lines/${phoneLineId}`, {
-    params: { business_id: businessId },
-  });
-}

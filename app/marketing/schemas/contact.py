@@ -1,55 +1,10 @@
-"""Pydantic schemas for the CRM: contacts, interactions, phone lines."""
+"""Pydantic schemas for the CRM: contacts, interactions."""
 
 from uuid import UUID
 from typing import Optional
 from datetime import datetime, date
 
 from pydantic import BaseModel, Field, AliasChoices
-
-
-# ─────────────────────────────────────────
-# BusinessPhoneLine
-# ─────────────────────────────────────────
-
-class PhoneLineCreate(BaseModel):
-    twilio_number: str = Field(..., max_length=20)
-    twilio_number_sid: Optional[str] = Field(None, max_length=100)
-    friendly_name: Optional[str] = Field(None, max_length=255)
-    campaign_name: Optional[str] = Field(None, max_length=255)
-    ad_account_id: Optional[str] = Field(None, max_length=255)
-    channel: Optional[str] = Field(None, max_length=100)
-    line_type: str = Field(default="tracking", pattern="^(mainline|tracking|department)$")
-    department_id: Optional[UUID] = None
-
-
-class PhoneLineUpdate(BaseModel):
-    friendly_name: Optional[str] = Field(None, max_length=255)
-    campaign_name: Optional[str] = Field(None, max_length=255)
-    ad_account_id: Optional[str] = Field(None, max_length=255)
-    channel: Optional[str] = Field(None, max_length=100)
-    line_type: Optional[str] = Field(None, pattern="^(mainline|tracking|department)$")
-    department_id: Optional[UUID] = None
-    active: Optional[bool] = None
-    twilio_number_sid: Optional[str] = Field(None, max_length=100)
-
-
-class PhoneLineOut(BaseModel):
-    id: UUID
-    business_id: UUID
-    department_id: Optional[UUID] = None
-    twilio_number: str
-    twilio_number_sid: Optional[str] = None
-    friendly_name: Optional[str] = None
-    campaign_name: Optional[str] = None
-    ad_account_id: Optional[str] = None
-    channel: Optional[str] = None
-    line_type: str
-    shaken_stir_status: str = "unverified"
-    active: bool
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
 
 
 # ─────────────────────────────────────────

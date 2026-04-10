@@ -1,8 +1,7 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
-  X,
   Loader2,
   DollarSign,
   Briefcase,
@@ -20,6 +19,7 @@ import {
   Save,
   Phone,
   RefreshCw,
+  BarChart2,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { MarkdownMessage } from "@/shared/components/ui/markdown-message";
@@ -41,6 +41,7 @@ import {
   type JobListResponse,
   type CustomerItem,
 } from "@/sales/api/sales";
+import { DeptLayout, type DeptSection } from "@/shared/components/layout/dept-layout";
 
 // ── Helpers ──
 
@@ -57,15 +58,6 @@ function formatDate(iso: string | null): string {
 /** Strip priority/urgency prefixes like "HIGH PRIORITY:", "URGENT:", etc. */
 function stripPriority(text: string): string {
   return text.replace(/^(HIGH PRIORITY|PRIORITY|URGENT|LOW PRIORITY|MEDIUM PRIORITY)\s*[:—\-]\s*/i, "").trim();
-}
-
-function formatDateFull(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
 }
 
 const STATUS_CONFIG: Record<string, { bg: string; label: string }> = {
@@ -702,13 +694,13 @@ export default function OperationsPage() {
   const businessId = business?.id;
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"jobs" | "customers">("jobs");
   const [showNewJob, setShowNewJob] = useState(false);
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [customerSearch, setCustomerSearch] = useState("");
   const [customerVisible, setCustomerVisible] = useState(5);
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
 
   // ── Queries ──
 
@@ -723,7 +715,7 @@ export default function OperationsPage() {
     queryFn: () => listJobs(businessId!, { status: "new", limit: 100 }),
     enabled: !!businessId,
     refetchOnWindowFocus: true,
-    staleTime: 30_000, // 30s — refetch on tab focus if stale
+    staleTime: 30_000,
   });
 
   const inProgressJobsQuery = useQuery({
@@ -786,7 +778,6 @@ export default function OperationsPage() {
       queryClient.invalidateQueries({ queryKey: ["ops-summary"] }),
       queryClient.invalidateQueries({ queryKey: ["ops-customers"] }),
     ]);
-    // Brief visual feedback so user sees it worked
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
@@ -796,16 +787,13 @@ export default function OperationsPage() {
     onMutate: async (vars) => {
       setPendingJobId(vars.id);
 
-      // Optimistic update — move job between columns instantly
       if (vars.status) {
         await queryClient.cancelQueries({ queryKey: ["ops-jobs"] });
 
-        // Snapshot all three columns for rollback
         const prevNew = queryClient.getQueryData<JobListResponse>(["ops-jobs", businessId, "new"]);
         const prevProgress = queryClient.getQueryData<JobListResponse>(["ops-jobs", businessId, "in_progress"]);
         const prevCompleted = queryClient.getQueryData<JobListResponse>(["ops-jobs", businessId, "completed"]);
 
-        // Find the job in whichever column it's in
         const allJobs = [
           ...(prevNew?.jobs || []),
           ...(prevProgress?.jobs || []),
@@ -816,7 +804,6 @@ export default function OperationsPage() {
         if (job) {
           const updatedJob = { ...job, status: vars.status };
 
-          // Remove from old column, add to new column
           const removeFrom = (data: JobListResponse | undefined): JobListResponse => {
             if (!data) return { jobs: [], total: 0 };
             const filtered = data.jobs.filter((j) => j.id !== vars.id);
@@ -827,7 +814,6 @@ export default function OperationsPage() {
             return { ...data, jobs: [updatedJob, ...data.jobs.filter((j) => j.id !== vars.id)], total: data.jobs.filter((j) => j.id !== vars.id).length + 1 };
           };
 
-          // Update each column cache
           queryClient.setQueryData<JobListResponse>(["ops-jobs", businessId, "new"],
             vars.status === "new" ? addTo(prevNew) : removeFrom(prevNew));
           queryClient.setQueryData<JobListResponse>(["ops-jobs", businessId, "in_progress"],
@@ -841,7 +827,6 @@ export default function OperationsPage() {
       return {};
     },
     onError: (_err, vars, context: any) => {
-      // Roll back on error
       if (context?.prevNew !== undefined) {
         queryClient.setQueryData(["ops-jobs", businessId, "new"], context.prevNew);
         queryClient.setQueryData(["ops-jobs", businessId, "in_progress"], context.prevProgress);
@@ -874,179 +859,164 @@ export default function OperationsPage() {
     },
   });
 
-  if (!businessId) {
-    return (
-      <div className="p-6">
-        <PageHeader title="Operations" description="Select a business to view jobs" />
-      </div>
-    );
-  }
-
   const summary = summaryQuery.data;
   const newJobs = newJobsQuery.data?.jobs || [];
   const inProgressJobs = inProgressJobsQuery.data?.jobs || [];
   const completedJobs = completedJobsQuery.data?.jobs || [];
   const customers = customersQuery.data?.customers || [];
+  const activeJobCount = newJobs.length + inProgressJobs.length;
+
+  // ── Section content ──
+
+  const jobsContent = (
+    <div className="space-y-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 justify-end">
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-7 w-7 p-0"
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          title="Refresh"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+        </Button>
+        <Button size="sm" className="h-7 text-xs" onClick={() => setShowNewJob(!showNewJob)}>
+          <Plus className="h-3 w-3 mr-1" /> New Job
+        </Button>
+        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowNewCustomer(!showNewCustomer)}>
+          <Plus className="h-3 w-3 mr-1" /> New Customer
+        </Button>
+      </div>
+
+      {showNewJob && (
+        <NewJobForm
+          customers={allCustomersQuery.data?.customers || []}
+          customersLoading={allCustomersQuery.isLoading}
+          onSubmit={(data) => createJobMutation.mutate(data)}
+          onCancel={() => setShowNewJob(false)}
+          isPending={createJobMutation.isPending}
+        />
+      )}
+
+      {showNewCustomer && (
+        <NewCustomerForm
+          onSubmit={(data) => createCustomerMutation.mutate(data)}
+          onCancel={() => setShowNewCustomer(false)}
+          isPending={createCustomerMutation.isPending}
+        />
+      )}
+
+      <div className="flex gap-6 overflow-x-auto pb-2">
+        <PipelineColumn
+          title="Not Started"
+          count={newJobs.length}
+          jobs={newJobs}
+          businessId={businessId}
+          employeeId={dana?.id ?? ""}
+          isLoading={newJobsQuery.isLoading}
+          onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
+          onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
+          onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
+          pendingJobId={pendingJobId}
+        />
+        <PipelineColumn
+          title="In Progress"
+          count={inProgressJobs.length}
+          jobs={inProgressJobs}
+          businessId={businessId}
+          employeeId={dana?.id ?? ""}
+          isLoading={inProgressJobsQuery.isLoading}
+          onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
+          onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
+          onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
+          pendingJobId={pendingJobId}
+        />
+        <PipelineColumn
+          title="Completed"
+          count={completedJobs.length}
+          jobs={completedJobs}
+          businessId={businessId}
+          employeeId={dana?.id ?? ""}
+          isLoading={completedJobsQuery.isLoading}
+          onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
+          onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
+          onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
+          pendingJobId={pendingJobId}
+        />
+      </div>
+
+      <CustomerTable
+        customers={customers}
+        isLoading={customersQuery.isLoading}
+        search={customerSearch}
+        onSearchChange={(v) => { setCustomerSearch(v); setCustomerVisible(5); }}
+        visibleCount={customerVisible}
+        onShowMore={() => setCustomerVisible((prev) => prev + 10)}
+        total={customersQuery.data?.total || 0}
+      />
+    </div>
+  );
+
+  const summaryContent = (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+            <DollarSign className="h-3.5 w-3.5" /> Job Value
+          </div>
+          <p className="mt-1 text-2xl font-bold">{formatMoney(summary?.total_quoted)}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+            <Briefcase className="h-3.5 w-3.5" /> Open Jobs
+          </div>
+          <p className="mt-1 text-2xl font-bold">{summary?.active_jobs || 0}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
+            <Users className="h-3.5 w-3.5" /> Customers
+          </div>
+          <p className="mt-1 text-2xl font-bold">{summary?.total_customers || 0}</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const sections: DeptSection[] = [
+    {
+      id: "jobs",
+      label: "Jobs",
+      icon: <Briefcase />,
+      badge: activeJobCount > 0 ? activeJobCount : undefined,
+      content: jobsContent,
+    },
+    {
+      id: "summary",
+      label: "Summary",
+      icon: <BarChart2 />,
+      content: summaryContent,
+    },
+  ];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="p-6 space-y-4">
       <PageHeader
         title="Operations"
         description="Job management, progress tracking, and customer operations"
       />
-
-      {/* ═══ KPI CARDS ═══ */}
-      <div className="grid grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-              <DollarSign className="h-3.5 w-3.5" /> Job Value
-            </div>
-            <p className="mt-1 text-2xl font-bold">{formatMoney(summary?.total_quoted)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-              <Briefcase className="h-3.5 w-3.5" /> Open Jobs
-            </div>
-            <p className="mt-1 text-2xl font-bold">{summary?.active_jobs || 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-              <Users className="h-3.5 w-3.5" /> Customers
-            </div>
-            <p className="mt-1 text-2xl font-bold">{summary?.total_customers || 0}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ═══ TAB TOGGLE ═══ */}
-      <div className="flex items-center gap-4 border-b">
-        <button
-          onClick={() => setActiveTab("jobs")}
-          className={cn(
-            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-            activeTab === "jobs"
-              ? "border-foreground text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Jobs
-        </button>
-        <button
-          onClick={() => setActiveTab("customers")}
-          className={cn(
-            "border-b-2 px-3 py-2 text-sm font-medium transition-colors",
-            activeTab === "customers"
-              ? "border-foreground text-foreground"
-              : "border-transparent text-muted-foreground hover:text-foreground",
-          )}
-        >
-          Customers
-        </button>
-        <div className="ml-auto pb-2 flex items-center gap-2">
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-7 w-7 p-0"
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            title="Refresh"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
-          </Button>
-          {activeTab === "jobs" && (
-            <Button size="sm" className="h-7 text-xs" onClick={() => setShowNewJob(!showNewJob)}>
-              <Plus className="h-3 w-3 mr-1" /> New Job
-            </Button>
-          )}
-          {activeTab === "customers" && (
-            <Button size="sm" className="h-7 text-xs" onClick={() => setShowNewCustomer(!showNewCustomer)}>
-              <Plus className="h-3 w-3 mr-1" /> New Customer
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* ═══ JOBS VIEW ═══ */}
-      {activeTab === "jobs" && (
-        <div className="space-y-4">
-          {showNewJob && (
-            <NewJobForm
-              customers={allCustomersQuery.data?.customers || []}
-              customersLoading={allCustomersQuery.isLoading}
-              onSubmit={(data) => createJobMutation.mutate(data)}
-              onCancel={() => setShowNewJob(false)}
-              isPending={createJobMutation.isPending}
-            />
-          )}
-
-          <div className="flex gap-6 overflow-x-auto pb-2">
-            <PipelineColumn
-              title="Not Started"
-              count={newJobs.length}
-              jobs={newJobs}
-              businessId={businessId}
-              employeeId={dana?.id ?? ""}
-              isLoading={newJobsQuery.isLoading}
-              onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
-              onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
-              onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
-              pendingJobId={pendingJobId}
-            />
-            <PipelineColumn
-              title="In Progress"
-              count={inProgressJobs.length}
-              jobs={inProgressJobs}
-              businessId={businessId}
-              employeeId={dana?.id ?? ""}
-              isLoading={inProgressJobsQuery.isLoading}
-              onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
-              onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
-              onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
-              pendingJobId={pendingJobId}
-            />
-            <PipelineColumn
-              title="Completed"
-              count={completedJobs.length}
-              jobs={completedJobs}
-              businessId={businessId}
-              employeeId={dana?.id ?? ""}
-              isLoading={completedJobsQuery.isLoading}
-              onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
-              onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
-              onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
-              pendingJobId={pendingJobId}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* ═══ CUSTOMERS VIEW ═══ */}
-      {activeTab === "customers" && (
-        <div className="space-y-4">
-          {showNewCustomer && (
-            <NewCustomerForm
-              onSubmit={(data) => createCustomerMutation.mutate(data)}
-              onCancel={() => setShowNewCustomer(false)}
-              isPending={createCustomerMutation.isPending}
-            />
-          )}
-
-          <CustomerTable
-            customers={customers}
-            isLoading={customersQuery.isLoading}
-            search={customerSearch}
-            onSearchChange={(v) => { setCustomerSearch(v); setCustomerVisible(5); }}
-            visibleCount={customerVisible}
-            onShowMore={() => setCustomerVisible((prev) => prev + 10)}
-            total={customersQuery.data?.total || 0}
-          />
-        </div>
-      )}
+      <DeptLayout
+        sections={sections}
+        agentName="operations"
+        businessId={businessId}
+        pendingMessage={pendingChatMessage}
+        onPendingConsumed={() => setPendingChatMessage(null)}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { useAppStore } from "@/shared/stores/app-store";
@@ -16,8 +16,13 @@ import type { TokenResponse } from "@/shared/types/auth";
 export default function AuthCallbackPage() {
   const navigate = useNavigate();
   const setTokens = useAppStore((s) => s.setTokens);
+  const didExchange = useRef(false);
 
   useEffect(() => {
+    // Guard against React StrictMode double-invocation — the code is single-use.
+    if (didExchange.current) return;
+    didExchange.current = true;
+
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const error = params.get("error");

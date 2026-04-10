@@ -7,13 +7,14 @@ import RegisterPage from "@/shared/pages/register";
 import AuthCallbackPage from "@/shared/pages/auth-callback";
 import MarketingPage from "@/marketing/pages/marketing";
 import AdminPage from "@/admin/pages/admin";
+import CallReportsPage from "@/admin/pages/reports";
 import BillingPage from "@/finance/pages/billing";
 import ReportsPage from "@/finance/pages/reports";
 import SalesPage from "@/sales/pages/sales";
 import OperationsPage from "@/operations/pages/operations";
 import ConnectionsPage from "@/connections/pages/connections";
 
-import DashboardPage from "@/dashboard/pages/dashboard";
+import NarrativePage from "@/narrative/pages/narrative";
 
 
 const queryClient = new QueryClient({
@@ -40,8 +41,9 @@ export default function App() {
 
           {/* Protected routes */}
           <Route element={<AppShell />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/narrative" element={<NarrativePage />} />
             <Route path="/admin" element={<AdminPage />} />
+            <Route path="/reports" element={<CallReportsPage />} />
             <Route path="/marketing/reports" element={<ReportsPage />} />
             <Route path="/marketing/*" element={<MarketingPage />} />
             <Route path="/sales" element={<SalesPage />} />
@@ -52,7 +54,7 @@ export default function App() {
           </Route>
 
           {/* Catch-all */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

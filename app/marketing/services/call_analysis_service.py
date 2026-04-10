@@ -17,6 +17,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.services.foundry_service import foundry_service
 from app.core.services.org_graph import org_graph
 
 logger = logging.getLogger(__name__)
@@ -138,8 +139,6 @@ class CallAnalysisService:
         call_context = "\n".join(context_parts)
 
         try:
-            from app.core.services.anthropic_service import claude_cli
-
             prompt = f"""Analyze this inbound call and determine:
 1. Which department should handle it
 2. What category of call it is
@@ -155,22 +154,7 @@ DEPARTMENT: [department name]
 CATEGORY: [category]
 ACTION: [suggested next action in one sentence]"""
 
-            result = await claude_cli._run_claude(
-                system_prompt=(
-                    "You analyze business phone calls and route them to the correct department. "
-                    "Sales = pricing, quotes, new customers, follow-ups. "
-                    "Operations = job requests, service scheduling, status checks, complaints. "
-                    "Finance = payments, invoices, refunds, account questions. "
-                    "Marketing = campaign responses, referrals, partnerships. "
-                    "Admin = general inquiries, transfers, wrong numbers. "
-                    "Respond with ONLY the requested format."
-                ),
-                message=prompt,
-                label="Call Analysis",
-                model="claude-haiku-4-5-20251001",
-                db=db,
-                business_id=business_id,
-            )
+            result = await foundry_service.complete("admin", prompt)
 
             if result:
                 return self._parse_analysis(result)
@@ -322,8 +306,6 @@ ACTION: [suggested next action in one sentence]"""
         if not employee_id:
             return {"status": "error", "message": f"No employee mapped for department: {department}"}
 
-        from app.core.services.anthropic_service import claude_cli
-
         task = f"""A call has been reviewed and routed to your department ({department}).
 
 ## Call Details
@@ -345,12 +327,8 @@ NEXT_STEP: [what should happen next]
 NOTES: [any additional context]"""
 
         try:
-            output = await claude_cli.call_employee(
-                employee_id=employee_id,
-                business_id=business_id,
-                task=task,
-                db=db,
-            )
+            dept_agent = department.lower()  # "sales", "operations", "finance", "marketing", "admin"
+            output = await foundry_service.complete(dept_agent, task)
 
             return {
                 "status": "processed",

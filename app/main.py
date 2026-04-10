@@ -1,17 +1,18 @@
 """
 FastAPI application entry point.
 
-Run with:  uvicorn app.main:app --reload
+Run with:  func start --port 8000   (Azure Functions host)
 
 Architecture:
-  - 18 tables: users, businesses, business_members, connected_accounts,
+  - 17 tables: users, businesses, business_members, connected_accounts,
     conversations, conversation_messages, notifications,
     departments, employees, contacts, interactions,
-    business_phone_lines, payments, phone_settings, jobs,
+    payments, phone_settings, jobs,
     media_files, content_posts (+org_templates legacy)
   - 5 departments: Marketing, Sales, Operations, Billing, Administration
   - 12 AI employees — system prompts stored in DB (employees.system_prompt)
-  - Integrations: Twilio, Stripe, OAuth platforms
+  - Integrations: Azure Communication Services, Stripe, OAuth platforms
+  - Phone number ownership: phone_lines table (phone_number, line_type, label) — ACS is source of truth
 """
 
 from contextlib import asynccontextmanager
@@ -30,7 +31,7 @@ from app.core.routers import (
 from app.marketing.routers import contacts, tracking_routing, email, content
 from app.sales import routers as sales
 from app.finance.routers import payments, billing, reports, stripe_router
-from app.admin.routers import twilio
+from app.admin.routers import acs
 
 
 @asynccontextmanager
@@ -53,27 +54,16 @@ async def lifespan(app: FastAPI):
         _logger.info("✅ departments table: forward_number + enabled columns ensured")
 
     # 1. Check Foundry client readiness (non-blocking — logs warnings if not ready)
-    from app.core.services.anthropic_service import anthropic_service
-    foundry_status = await anthropic_service.startup_check()
+    from app.core.services.openai_service import openai_service
+    foundry_status = await openai_service.startup_check()
     if not foundry_status["ready"]:
         _logger.warning(
             "⚠️  Azure AI Foundry not ready — chat will fail until configured. "
             f"{foundry_status['message']}"
         )
 
-    # 2. Start APScheduler + Twilio ↔ DB sync (every 15 min)
-    from apscheduler.schedulers.asyncio import AsyncIOScheduler
-    _scheduler = AsyncIOScheduler()
-    _scheduler.start()
-    app.state.scheduler = _scheduler
-
-    from app.admin.services.twilio_sync import start_twilio_sync
-    await start_twilio_sync(_scheduler)
-
     yield
     # ── Shutdown ──
-    if hasattr(app.state, "scheduler"):
-        app.state.scheduler.shutdown(wait=False)
     from app.database import engine
     await engine.dispose()
 
@@ -108,7 +98,6 @@ app.include_router(notifications.router, prefix=settings.api_prefix)
 app.include_router(organization.router, prefix=settings.api_prefix)
 # ── Marketing ──
 app.include_router(contacts.router, prefix=settings.api_prefix)
-app.include_router(contacts.phone_lines_router, prefix=settings.api_prefix)
 app.include_router(tracking_routing.router, prefix=settings.api_prefix)
 app.include_router(email.router, prefix=settings.api_prefix)
 app.include_router(content.router, prefix=settings.api_prefix)
@@ -123,5 +112,5 @@ app.include_router(stripe_router.router, prefix=settings.api_prefix)
 app.include_router(reports.router, prefix=settings.api_prefix)
 
 # ── Administration ──
-app.include_router(twilio.router, prefix=settings.api_prefix)
+app.include_router(acs.router, prefix=settings.api_prefix)
 

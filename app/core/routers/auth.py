@@ -29,27 +29,36 @@ auth_service = AuthService()
 
 
 async def _get_uami_assertion() -> str:
-    """Acquire a client assertion token from UAMI via IMDS.
-
-    Uses azure-identity's AsyncManagedIdentityCredential (which we already use
-    for Key Vault and Graph) to request a token for api://AzureADTokenExchange.
-    This token is then passed to MSAL as client_assertion.
-
-    msal.UserAssignedManagedIdentity only works with acquire_token_for_client,
-    not acquire_token_by_authorization_code — hence the manual IMDS call.
-    """
+    """Acquire a client assertion token from UAMI via IMDS (production only)."""
     async with AsyncManagedIdentityCredential(client_id=settings.uami_client_id) as cred:
         token = await cred.get_token("api://AzureADTokenExchange")
     return token.token
 
 
-def _msal_app(client_assertion: str):
-    """MSAL ConfidentialClientApplication using a pre-acquired UAMI assertion."""
+async def _get_client_credential():
+    """Return the MSAL client_credential dict/string.
+
+    Production (UAMI set): federated assertion via IMDS — no secret ever stored.
+    Local dev (UAMI absent): plain client secret loaded from Key Vault via az login.
+    """
+    if settings.uami_client_id:
+        assertion = await _get_uami_assertion()
+        return {"client_assertion": assertion}
+    if settings.azure_ad_client_secret:
+        return settings.azure_ad_client_secret
+    raise HTTPException(
+        status_code=503,
+        detail="Azure AD not configured: set UAMI_CLIENT_ID (prod) or AZURE_AD_CLIENT_SECRET (local)",
+    )
+
+
+def _msal_app(client_credential):
+    """MSAL ConfidentialClientApplication."""
     import msal
     return msal.ConfidentialClientApplication(
         settings.azure_ad_client_id,
         authority=f"https://login.microsoftonline.com/{settings.azure_ad_tenant_id}",
-        client_credential={"client_assertion": client_assertion},
+        client_credential=client_credential,
     )
 
 
@@ -98,8 +107,8 @@ async def microsoft_login():
     if not settings.azure_ad_client_id or not settings.azure_ad_tenant_id:
         raise HTTPException(status_code=503, detail="Azure AD not configured")
 
-    assertion = await _get_uami_assertion()
-    auth_url = _msal_app(assertion).get_authorization_request_url(
+    credential = await _get_client_credential()
+    auth_url = _msal_app(credential).get_authorization_request_url(
         scopes=["User.Read"],
         redirect_uri=settings.azure_ad_redirect_uri,
         state="sapphire",
@@ -120,8 +129,8 @@ async def microsoft_exchange(
     the frontend route itself (not an /api/ path) so SWA serves index.html for
     the navigation, and React makes this as a normal XHR/fetch request.
     """
-    assertion = await _get_uami_assertion()
-    result = _msal_app(assertion).acquire_token_by_authorization_code(
+    credential = await _get_client_credential()
+    result = _msal_app(credential).acquire_token_by_authorization_code(
         code,
         scopes=["User.Read"],
         redirect_uri=settings.azure_ad_redirect_uri,

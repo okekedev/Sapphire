@@ -114,14 +114,6 @@ export default function ReportsPage() {
     enabled: !!businessId,
   });
 
-  if (!businessId) {
-    return (
-      <div className="p-6">
-        <PageHeader title="Reports" description="Select a business to view reports" />
-      </div>
-    );
-  }
-
   const funnel = funnelQuery.data;
   const stages = funnel?.stages ?? [];
   const campaigns = funnel?.campaigns ?? [];
