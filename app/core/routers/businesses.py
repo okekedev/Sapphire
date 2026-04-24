@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.core.models.business import Business, BusinessMember
 from app.core.models.connected_account import ConnectedAccount
+from app.core.models.organization import Department, Employee
 from app.core.models.user import User
 from app.core.schemas.business import (
     BusinessCreate, BusinessOut, BusinessUpdate,
@@ -33,6 +34,79 @@ router = APIRouter(prefix="/businesses")
 
 
 # ── Helpers ──
+
+
+async def _seed_workspace(db: AsyncSession, business_id: UUID) -> None:
+    """Copy template departments + employees into a new business workspace.
+
+    Template rows have business_id=NULL. This function:
+      1. Copies all template departments to the new business.
+      2. Copies all template employees, remapping department_id and reports_to.
+    """
+    # 1. Load template departments
+    dept_result = await db.execute(
+        select(Department).where(Department.business_id.is_(None))
+        .order_by(Department.display_order, Department.name)
+    )
+    template_depts = dept_result.scalars().all()
+
+    # 2. Create business-scoped departments, track old→new ID mapping
+    dept_id_map: dict[UUID, UUID] = {}
+    for tmpl in template_depts:
+        new_dept = Department(
+            business_id=business_id,
+            name=tmpl.name,
+            description=tmpl.description,
+            documentation=tmpl.documentation,
+            icon=tmpl.icon,
+            display_order=tmpl.display_order,
+        )
+        db.add(new_dept)
+        await db.flush()
+        dept_id_map[tmpl.id] = new_dept.id
+
+    # 3. Load template employees
+    emp_result = await db.execute(
+        select(Employee).where(Employee.business_id.is_(None))
+        .order_by(Employee.name)
+    )
+    template_emps = emp_result.scalars().all()
+
+    # 4. Create new employees (reports_to=None first — set after all IDs are known)
+    emp_id_map: dict[UUID, UUID] = {}
+    pending_reports: list[tuple[Employee, UUID]] = []  # (new_emp, template_reports_to_id)
+
+    for tmpl in template_emps:
+        new_dept_id = dept_id_map.get(tmpl.department_id)
+        if not new_dept_id:
+            continue
+        new_emp = Employee(
+            business_id=business_id,
+            department_id=new_dept_id,
+            name=tmpl.name,
+            title=tmpl.title,
+            file_stem=tmpl.file_stem,
+            model_tier=tmpl.model_tier,
+            system_prompt=tmpl.system_prompt,
+            reports_to=None,
+            status=tmpl.status,
+            capabilities=tmpl.capabilities,
+            job_skills=tmpl.job_skills,
+            is_head=tmpl.is_head,
+        )
+        db.add(new_emp)
+        await db.flush()
+        emp_id_map[tmpl.id] = new_emp.id
+        if tmpl.reports_to:
+            pending_reports.append((new_emp, tmpl.reports_to))
+
+    # 5. Patch reports_to using the completed mapping
+    for new_emp, template_reports_to in pending_reports:
+        mapped = emp_id_map.get(template_reports_to)
+        if mapped:
+            new_emp.reports_to = mapped
+
+    await db.flush()
 
 
 async def _get_business_for_user(
@@ -65,19 +139,7 @@ async def create_business(
     user_id: UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new business. Each user account is limited to one business."""
-    # Enforce single business per account
-    existing = await db.execute(
-        select(Business)
-        .join(BusinessMember, BusinessMember.business_id == Business.id)
-        .where(BusinessMember.user_id == user_id)
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="You already have a business. Only one business per account is allowed.",
-        )
-
+    """Create a new client workspace. Agency admins can create many."""
     business = Business(
         name=body.name,
         website=body.website,
@@ -94,6 +156,29 @@ async def create_business(
         is_owner=True,
     )
     db.add(member)
+    await db.flush()
+
+    # Seed departments + employees from templates
+    await _seed_workspace(db, business.id)
+
+    # Grant all other existing platform users access to this new client workspace.
+    # Roles are assigned separately via the team management API (POST /team/members).
+    existing_members = await db.execute(
+        select(BusinessMember.user_id)
+        .where(BusinessMember.user_id != user_id)
+        .distinct()
+    )
+    seen_users: set[UUID] = set()
+    for (uid,) in existing_members.all():
+        if uid in seen_users:
+            continue
+        seen_users.add(uid)
+        db.add(BusinessMember(
+            business_id=business.id,
+            user_id=uid,
+            is_owner=False,
+            invited_by=user_id,
+        ))
     await db.flush()
 
     return business
@@ -173,7 +258,23 @@ async def save_company_profile(
 # ── Connected Accounts ──
 
 
-@router.get("/{business_id}/accounts")
+class ConnectedAccountItem(BaseModel):
+    id: str
+    platform: str
+    status: str
+    connected_at: str
+
+
+class ConnectedAccountListOut(BaseModel):
+    accounts: list[ConnectedAccountItem]
+    total: int
+
+
+class MessageOut(BaseModel):
+    message: str
+
+
+@router.get("/{business_id}/accounts", response_model=ConnectedAccountListOut)
 async def list_connected_accounts(
     business_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
@@ -204,179 +305,8 @@ async def list_connected_accounts(
     }
 
 
-# ── Team Members ──
-
-
-class MemberOut(BaseModel):
-    id: UUID
-    user_id: UUID
-    email: str
-    full_name: str
-    is_owner: bool
-    allowed_tabs: list[str] | None  # None = all tabs (owner / legacy)
-    joined_at: str
-
-
-class MyMembershipOut(BaseModel):
-    id: UUID
-    is_owner: bool
-    allowed_tabs: list[str] | None  # None = all tabs
-
-
-class InviteMemberRequest(BaseModel):
-    email: str = Field(..., max_length=255)
-    # allowed_tabs: which tab paths this member can see.
-    # Pass null / omit to grant access to all tabs.
-    allowed_tabs: list[str] | None = None
-
-
-class UpdateMemberTabsRequest(BaseModel):
-    allowed_tabs: list[str] | None = None
-
-
-@router.get("/{business_id}/members", response_model=list[MemberOut])
-async def list_members(
-    business_id: UUID,
-    user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """List all team members for a business."""
-    await _get_business_for_user(business_id, user_id, db)
-
-    result = await db.execute(
-        select(BusinessMember, User)
-        .join(User, User.id == BusinessMember.user_id)
-        .where(BusinessMember.business_id == business_id)
-        .order_by(BusinessMember.joined_at.asc())
-    )
-    rows = result.all()
-    return [
-        MemberOut(
-            id=member.id,
-            user_id=member.user_id,
-            email=user.email,
-            full_name=user.full_name,
-            is_owner=member.is_owner,
-            allowed_tabs=None if member.is_owner else member.allowed_tabs,
-            joined_at=member.joined_at.isoformat(),
-        )
-        for member, user in rows
-    ]
-
-
-@router.get("/{business_id}/my-membership", response_model=MyMembershipOut)
-async def get_my_membership(
-    business_id: UUID,
-    user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """Return the current user's membership record for a business (is_owner + allowed_tabs)."""
-    result = await db.execute(
-        select(BusinessMember).where(
-            BusinessMember.business_id == business_id,
-            BusinessMember.user_id == user_id,
-        )
-    )
-    member = result.scalar_one_or_none()
-    if not member:
-        raise HTTPException(status_code=404, detail="Not a member of this business")
-    return MyMembershipOut(
-        id=member.id,
-        is_owner=member.is_owner,
-        # Owners always see all tabs regardless of allowed_tabs field
-        allowed_tabs=None if member.is_owner else member.allowed_tabs,
-    )
-
-
-@router.post("/{business_id}/members", status_code=201)
-async def invite_member(
-    business_id: UUID,
-    payload: InviteMemberRequest,
-    user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """Invite a user to the business by email (owner/admin only)."""
-    await _get_business_for_user(business_id, user_id, db, require_admin=True)
-
-    # Find the user by email
-    result = await db.execute(select(User).where(User.email == payload.email))
-    target_user = result.scalar_one_or_none()
-    if not target_user:
-        raise HTTPException(status_code=404, detail="No user found with that email")
-
-    # Check if already a member
-    existing = await db.execute(
-        select(BusinessMember).where(
-            BusinessMember.business_id == business_id,
-            BusinessMember.user_id == target_user.id,
-        )
-    )
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail="User is already a member")
-
-    member = BusinessMember(
-        business_id=business_id,
-        user_id=target_user.id,
-        is_owner=False,
-        allowed_tabs=payload.allowed_tabs,
-        invited_by=user_id,
-    )
-    db.add(member)
-    tab_summary = f"{len(payload.allowed_tabs)} tabs" if payload.allowed_tabs else "all tabs"
-    return {"message": f"Invited {payload.email} with access to {tab_summary}"}
-
-
-@router.patch("/{business_id}/members/{member_id}")
-async def update_member_tabs(
-    business_id: UUID,
-    member_id: UUID,
-    payload: UpdateMemberTabsRequest,
-    user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """Update which tabs a team member can access (owner/admin only)."""
-    await _get_business_for_user(business_id, user_id, db, require_admin=True)
-
-    result = await db.execute(
-        select(BusinessMember).where(
-            BusinessMember.id == member_id,
-            BusinessMember.business_id == business_id,
-        )
-    )
-    member = result.scalar_one_or_none()
-    if not member:
-        raise HTTPException(status_code=404, detail="Member not found")
-    if member.is_owner:
-        raise HTTPException(status_code=403, detail="Cannot change the owner's tab access")
-
-    member.allowed_tabs = payload.allowed_tabs
-    tab_summary = f"{len(payload.allowed_tabs)} tabs" if payload.allowed_tabs else "all tabs"
-    return {"message": f"Tab access updated to {tab_summary}"}
-
-
-@router.delete("/{business_id}/members/{member_id}", status_code=204)
-async def remove_member(
-    business_id: UUID,
-    member_id: UUID,
-    user_id: UUID = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """Remove a team member (owner/admin only). Cannot remove the owner."""
-    await _get_business_for_user(business_id, user_id, db, require_admin=True)
-
-    result = await db.execute(
-        select(BusinessMember).where(
-            BusinessMember.id == member_id,
-            BusinessMember.business_id == business_id,
-        )
-    )
-    member = result.scalar_one_or_none()
-    if not member:
-        raise HTTPException(status_code=404, detail="Member not found")
-    if member.is_owner:
-        raise HTTPException(status_code=403, detail="Cannot remove the owner")
-
-    await db.delete(member)
+# Team member management is handled by the dedicated team router (POST /team/*)
+# which uses the RBAC roles system. See app/core/routers/team.py.
 
 
 # ── Onboarding (dynamic — uses Marketing dept head) ──

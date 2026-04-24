@@ -31,6 +31,7 @@ from app.database import get_db
 from app.marketing.models import Contact, Interaction
 from app.operations.models import Job
 from app.finance.models import Payment
+from app.core.models.user import User
 from app.core.services.auth_service import get_current_user_id
 from app.core.services.phone_utils import normalize_phone
 from app.sales.schemas import (
@@ -217,7 +218,6 @@ async def qualify_prospect(
 
         interaction.metadata_ = meta
         await db.flush()
-        await db.commit()
 
         return QualifyResponse(
             status="qualified",
@@ -241,7 +241,6 @@ async def qualify_prospect(
                 contact.status = "other"
 
         await db.flush()
-        await db.commit()
 
         return QualifyResponse(
             status="qualified",
@@ -359,7 +358,6 @@ async def convert_to_job(
         li.metadata_ = meta
 
     await db.flush()
-    await db.commit()
     await db.refresh(job)
 
     return ConvertToJobResponse(
@@ -409,7 +407,6 @@ async def close_lead(
         li.metadata_ = meta
 
     await db.flush()
-    await db.commit()
 
     return CloseLeadResponse(
         status="closed",
@@ -694,6 +691,16 @@ async def list_customers(
     for row in rev_result:
         rev_map[row.contact_id] = float(row.total_rev)
 
+    # Batch-load assigned user names
+    assigned_user_ids = {c.assigned_to for c in rows if c.assigned_to}
+    user_name_map: dict[UUID, str] = {}
+    if assigned_user_ids:
+        uname_result = await db.execute(
+            select(User.id, User.full_name).where(User.id.in_(assigned_user_ids))
+        )
+        for row in uname_result:
+            user_name_map[row.id] = row.full_name or row.id.hex[:8]
+
     # Batch-load latest Sales call interaction per contact (for lead context)
     call_context_map: dict[UUID, dict] = {}
     if status == "prospect":
@@ -749,6 +756,8 @@ async def list_customers(
                 score=ctx.get("score"),
                 duration_s=ctx.get("duration_s"),
                 campaign_name=ctx.get("campaign_name"),
+                assigned_to=c.assigned_to,
+                assigned_user_name=user_name_map.get(c.assigned_to) if c.assigned_to else None,
             )
         )
 
@@ -776,7 +785,6 @@ async def create_customer(
     )
     db.add(contact)
     await db.flush()
-    await db.commit()
     await db.refresh(contact)
 
     return CustomerItem(
@@ -830,7 +838,6 @@ async def update_customer(
         contact.status = "active_customer"
 
     await db.flush()
-    await db.commit()
     await db.refresh(contact)
 
     # Get job count + revenue
@@ -842,6 +849,13 @@ async def update_customer(
             Payment.contact_id == customer_id, Payment.business_id == business_id, Payment.status == "completed"
         )
     )).scalar() or 0
+
+    # Resolve assigned user name if set
+    assigned_user_name: str | None = None
+    if contact.assigned_to:
+        u_result = await db.execute(select(User.full_name).where(User.id == contact.assigned_to))
+        u_name = u_result.scalar_one_or_none()
+        assigned_user_name = u_name or None
 
     return CustomerItem(
         id=contact.id,
@@ -856,6 +870,8 @@ async def update_customer(
         job_count=jc,
         notes=contact.notes,
         created_at=contact.created_at,
+        assigned_to=contact.assigned_to,
+        assigned_user_name=assigned_user_name,
     )
 
 
@@ -901,9 +917,22 @@ async def list_jobs(
             contact_names[row.id] = row.full_name or "Unknown"
             contact_phones[row.id] = row.phone
 
+    # Batch-load assigned staff info
+    from app.operations.models import Staff
+    staff_ids = {j.assigned_to for j in rows if j.assigned_to}
+    staff_map: dict = {}
+    if staff_ids:
+        s_result = await db.execute(
+            select(Staff.id, Staff.first_name, Staff.last_name, Staff.color).where(Staff.id.in_(staff_ids))
+        )
+        for row in s_result:
+            name = f"{row.first_name} {row.last_name or ''}".strip()
+            staff_map[row.id] = {"name": name, "color": row.color}
+
     jobs = []
     for j in rows:
         meta = dict(j.metadata_ or {})
+        staff_info = staff_map.get(j.assigned_to, {}) if j.assigned_to else {}
         jobs.append(
             JobItem(
                 id=j.id,
@@ -917,6 +946,14 @@ async def list_jobs(
                 notes=j.notes,
                 amount_quoted=float(j.amount_quoted) if j.amount_quoted else None,
                 amount_billed=float(j.amount_billed) if j.amount_billed else None,
+                template_id=j.template_id,
+                template_data=j.template_data,
+                assigned_to=j.assigned_to,
+                assigned_staff_name=staff_info.get("name"),
+                assigned_staff_color=staff_info.get("color"),
+                service_address=j.service_address,
+                scheduled_at=j.scheduled_at,
+                dispatched_at=j.dispatched_at,
                 started_at=j.started_at,
                 completed_at=j.completed_at,
                 created_at=j.created_at,
@@ -956,11 +993,12 @@ async def create_job(
         description=payload.description,
         notes=payload.notes,
         amount_quoted=payload.amount_quoted,
+        template_id=payload.template_id,
+        service_address=payload.service_address,
         created_by=current_user_id,
     )
     db.add(job)
     await db.flush()
-    await db.commit()
     await db.refresh(job)
 
     meta = dict(job.metadata_ or {})
@@ -976,6 +1014,8 @@ async def create_job(
         notes=job.notes,
         amount_quoted=float(job.amount_quoted) if job.amount_quoted else None,
         amount_billed=float(job.amount_billed) if job.amount_billed else None,
+        template_id=job.template_id,
+        service_address=job.service_address,
         started_at=job.started_at,
         completed_at=job.completed_at,
         created_at=job.created_at,
@@ -994,7 +1034,11 @@ async def update_job(
     current_user_id: UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a job's details or status."""
+    """Update a job's details or status. Fires dispatch SMS when assigned_to is set."""
+    from app.operations.models import Staff, JobTemplate
+    from app.marketing.models import PhoneLine
+    from app.admin.services.acs_service import acs_service
+
     result = await db.execute(
         select(Job).where(Job.id == job_id, Job.business_id == business_id)
     )
@@ -1003,11 +1047,12 @@ async def update_job(
         raise HTTPException(status_code=404, detail="Job not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    prev_assigned_to = job.assigned_to
 
     # Handle status transitions
     if "status" in update_data:
         new_status = update_data["status"]
-        if new_status == "in_progress" and not job.started_at:
+        if new_status == "started" and not job.started_at:
             job.started_at = datetime.now(timezone.utc)
         elif new_status == "completed" and not job.completed_at:
             job.completed_at = datetime.now(timezone.utc)
@@ -1015,13 +1060,62 @@ async def update_job(
     for field, value in update_data.items():
         setattr(job, field, value)
 
+    # Auto-dispatch: if assigned_to was just set, mark dispatched
+    new_assigned = update_data.get("assigned_to")
+    if new_assigned and new_assigned != str(prev_assigned_to):
+        job.dispatched_at = datetime.now(timezone.utc)
+        if job.status == "new":
+            job.status = "dispatched"
+
     await db.flush()
-    await db.commit()
     await db.refresh(job)
+
+    # Fire SMS if newly assigned + staff has a phone number
+    if new_assigned and new_assigned != str(prev_assigned_to):
+        staff_result = await db.execute(select(Staff).where(Staff.id == job.assigned_to))
+        staff = staff_result.scalar_one_or_none()
+        if staff and staff.phone:
+            # Get mainline number to send from
+            mainline_result = await db.execute(
+                select(PhoneLine).where(
+                    PhoneLine.business_id == business_id,
+                    PhoneLine.line_type == "mainline",
+                ).limit(1)
+            )
+            mainline = mainline_result.scalar_one_or_none()
+            if mainline:
+                scheduled_str = ""
+                if job.scheduled_at:
+                    scheduled_str = f" on {job.scheduled_at.strftime('%b %-d at %-I:%M %p')}"
+                address_str = f" at {job.service_address}" if job.service_address else ""
+                sms_body = (
+                    f"Hi {staff.first_name}, you've been assigned to: {job.title}"
+                    f"{address_str}{scheduled_str}. Reply START when on site."
+                )
+                import asyncio
+                asyncio.create_task(
+                    acs_service.send_sms(
+                        to=staff.phone,
+                        from_number=mainline.phone_number,
+                        body=sms_body,
+                    )
+                )
 
     # Get contact name + phone
     c_result = await db.execute(select(Contact.full_name, Contact.phone).where(Contact.id == job.contact_id))
     c_row = c_result.one_or_none()
+
+    # Get assigned staff info
+    staff_name = None
+    staff_color = None
+    if job.assigned_to:
+        s_result = await db.execute(
+            select(Staff.first_name, Staff.last_name, Staff.color).where(Staff.id == job.assigned_to)
+        )
+        s_row = s_result.one_or_none()
+        if s_row:
+            staff_name = f"{s_row.first_name} {s_row.last_name or ''}".strip()
+            staff_color = s_row.color
 
     meta = dict(job.metadata_ or {})
     return JobItem(
@@ -1036,6 +1130,14 @@ async def update_job(
         notes=job.notes,
         amount_quoted=float(job.amount_quoted) if job.amount_quoted else None,
         amount_billed=float(job.amount_billed) if job.amount_billed else None,
+        template_id=job.template_id,
+        template_data=job.template_data,
+        assigned_to=job.assigned_to,
+        assigned_staff_name=staff_name,
+        assigned_staff_color=staff_color,
+        service_address=job.service_address,
+        scheduled_at=job.scheduled_at,
+        dispatched_at=job.dispatched_at,
         started_at=job.started_at,
         completed_at=job.completed_at,
         created_at=job.created_at,

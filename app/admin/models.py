@@ -57,11 +57,11 @@ class PhoneLine(Base):
 
 class PhoneSettings(Base):
     """
-    Per-business Twilio mainline configuration.
+    Per-business IVR configuration (ACS).
 
     Stores greeting customization, voice selection, recording/transcription toggles,
-    and forwarding rules. Department routing (forward_number, enabled) is on the
-    departments table directly.
+    and forwarding rules. Department routing (forward_number, enabled, sms_enabled)
+    lives on the departments table.
     """
     __tablename__ = "phone_settings"
 
@@ -122,25 +122,6 @@ class PhoneSettings(Base):
     )  # "message" (play after-hours message + hangup) or "forward" (forward to number)
     after_hours_message: Mapped[Optional[str]] = mapped_column(Text)
     after_hours_forward_number: Mapped[Optional[str]] = mapped_column(String(20))
-
-    # ── A2P 10DLC (registration done in Twilio Console, SIDs stored for API queries) ──
-    messaging_service_sid: Mapped[Optional[str]] = mapped_column(
-        String(50),
-    )  # Twilio Messaging Service SID — used to check campaign status + add new numbers
-    brand_registration_sid: Mapped[Optional[str]] = mapped_column(
-        String(50),
-    )  # TCR brand SID — used to verify numbers are branded
-
-    # ── SMS Toggle (legacy — unused) ──
-    sms_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false",
-    )
-
-    # ── WhatsApp (legacy columns — WhatsApp config moved to departments table) ──
-    whatsapp_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default="false",
-    )
-    whatsapp_from_number: Mapped[Optional[str]] = mapped_column(String(20))
 
     # ── Webhook URL (ngrok tunnel or production domain — persisted across restarts) ──
     webhook_base_url: Mapped[str] = mapped_column(

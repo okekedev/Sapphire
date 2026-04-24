@@ -28,9 +28,6 @@ param azureAdTenantId string
 @description('Azure AD app registration client ID (Sapphire app).')
 param azureAdClientId string
 
-@description('Object ID of the Sapphire Users group. Empty = skip group check.')
-param azureAdGroupId string = ''
-
 @description('OAuth redirect URI for Azure AD (frontend callback page).')
 param azureAdRedirectUri string = 'https://swa-sapphire-prod.azurestaticapps.net/auth/callback'
 
@@ -73,14 +70,6 @@ param microsoftClientSecret string
 @secure()
 @description('LinkedIn OAuth client secret.')
 param linkedinClientSecret string
-
-@secure()
-@description('Twitter/X OAuth client secret.')
-param twitterClientSecret string
-
-@secure()
-@description('TikTok OAuth client key (functions as a secret).')
-param tiktokClientSecret string
 
 @secure()
 @description('Applyra API key.')
@@ -207,18 +196,6 @@ resource kvSecretLinkedinClientSecret 'Microsoft.KeyVault/vaults/secrets@2023-07
   parent: kv
   name: 'linkedin-client-secret'
   properties: { value: linkedinClientSecret }
-}
-
-resource kvSecretTwitterClientSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: kv
-  name: 'twitter-client-secret'
-  properties: { value: twitterClientSecret }
-}
-
-resource kvSecretTiktokClientSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
-  parent: kv
-  name: 'tiktok-client-secret'
-  properties: { value: tiktokClientSecret }
 }
 
 resource kvSecretApplyraApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
@@ -463,7 +440,6 @@ resource ca 'Microsoft.App/containerApps@2023-11-02-preview' = {
             // Azure AD (public values, not secrets)
             { name: 'AZURE_AD_TENANT_ID',    value: azureAdTenantId }
             { name: 'AZURE_AD_CLIENT_ID',    value: azureAdClientId }
-            { name: 'AZURE_AD_GROUP_ID',     value: azureAdGroupId }
             { name: 'AZURE_AD_REDIRECT_URI', value: azureAdRedirectUri }
             // AI Services
             { name: 'FOUNDRY_ENDPOINT',      value: 'https://${aiName}.cognitiveservices.azure.com' }

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 from app.config import settings as app_settings
 from app.database import get_db
-from app.marketing.models import Contact, Interaction
+from app.marketing.models import Contact, Interaction, Organization
 from app.marketing.schemas.contact import (
     ContactCreate,
     ContactUpdate,
@@ -47,6 +47,27 @@ router = APIRouter(prefix="/contacts", tags=["Contacts"])
 
 
 # ── Helpers ──
+
+def _apply_contact_filters(q, status, source_channel, organization_id, search):
+    """Apply common filter clauses to a contact query or count query."""
+    if status:
+        q = q.where(Contact.status == status)
+    if source_channel:
+        q = q.where(Contact.source_channel == source_channel)
+    if organization_id:
+        q = q.where(Contact.organization_id == organization_id)
+    if search:
+        from sqlalchemy import or_
+        pattern = f"%{search}%"
+        q = q.where(
+            or_(
+                Contact.full_name.ilike(pattern),
+                Contact.phone.ilike(pattern),
+                Contact.email.ilike(pattern),
+            )
+        )
+    return q
+
 
 async def _get_contact_or_404(
     contact_id: UUID, business_id: UUID, db: AsyncSession
@@ -110,54 +131,45 @@ async def list_contacts(
     business_id: UUID,
     status: Optional[str] = Query(
         None,
-        pattern="^(prospect|active_customer|churned)$",
+        pattern="^(new|prospect|active_customer|no_conversion|churned|other)$",
     ),
     source_channel: Optional[str] = Query(None),
+    organization_id: Optional[UUID] = Query(None),
     search: Optional[str] = Query(None, description="Search name, phone, or email"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user_id: UUID = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """List contacts, optionally filtered by status or searched by name/phone/email."""
-    q = select(Contact).where(Contact.business_id == business_id)
+    """List contacts, optionally filtered by status, org, or searched by name/phone/email."""
+    base = select(Contact).where(Contact.business_id == business_id)
+    base = _apply_contact_filters(base, status, source_channel, organization_id, search)
 
-    if status:
-        q = q.where(Contact.status == status)
-    if source_channel:
-        q = q.where(Contact.source_channel == source_channel)
-    if search:
-        pattern = f"%{search}%"
-        from sqlalchemy import or_
-        q = q.where(
-            or_(
-                Contact.full_name.ilike(pattern),
-                Contact.phone.ilike(pattern),
-                Contact.email.ilike(pattern),
-            )
-        )
-
-    q = q.order_by(Contact.updated_at.desc()).limit(limit).offset(offset)
-    result = await db.execute(q)
+    result = await db.execute(base.order_by(Contact.updated_at.desc()).limit(limit).offset(offset))
     contacts = result.scalars().all()
 
-    # Total
-    count_q = select(func.count(Contact.id)).where(Contact.business_id == business_id)
-    if status:
-        count_q = count_q.where(Contact.status == status)
-    if search:
-        pattern = f"%{search}%"
-        from sqlalchemy import or_
-        count_q = count_q.where(
-            or_(
-                Contact.full_name.ilike(pattern),
-                Contact.phone.ilike(pattern),
-                Contact.email.ilike(pattern),
-            )
-        )
+    count_q = _apply_contact_filters(
+        select(func.count(Contact.id)).where(Contact.business_id == business_id),
+        status, source_channel, organization_id, search,
+    )
     total = (await db.execute(count_q)).scalar_one()
 
-    return ContactListResponse(contacts=list(contacts), total=total)
+    # Batch-load org names
+    org_ids = {c.organization_id for c in contacts if c.organization_id}
+    org_name_map: dict = {}
+    if org_ids:
+        org_rows = await db.execute(
+            select(Organization.id, Organization.name).where(Organization.id.in_(org_ids))
+        )
+        org_name_map = {row.id: row.name for row in org_rows.all()}
+
+    contact_outs = []
+    for c in contacts:
+        out = ContactOut.model_validate(c)
+        out = out.model_copy(update={"organization_name": org_name_map.get(c.organization_id) if c.organization_id else None})
+        contact_outs.append(out)
+
+    return ContactListResponse(contacts=contact_outs, total=total)
 
 
 @router.post("", response_model=ContactOut, status_code=201)
@@ -187,9 +199,11 @@ async def create_contact(
         country=payload.country,
         birthday=payload.birthday,
         notes=payload.notes,
+        organization_id=payload.organization_id,
+        contact_role=payload.contact_role,
     )
     db.add(contact)
-    await db.commit()
+    await db.flush()
     await db.refresh(contact)
     return contact
 
@@ -228,7 +242,7 @@ async def update_contact(
     for field, value in update_data.items():
         setattr(contact, field, value)
 
-    await db.commit()
+    await db.flush()
     await db.refresh(contact)
     return contact
 
@@ -244,7 +258,7 @@ async def update_contact_status(
     """Quick prospect → customer (or churn) transition."""
     contact = await _get_contact_or_404(contact_id, business_id, db)
     contact.status = payload.status
-    await db.commit()
+    await db.flush()
     await db.refresh(contact)
     return contact
 
@@ -259,7 +273,7 @@ async def delete_contact(
     """Delete a contact (cascades to interactions)."""
     contact = await _get_contact_or_404(contact_id, business_id, db)
     await db.delete(contact)
-    await db.commit()
+    await db.flush()
 
 
 # ── Interactions ──
@@ -318,7 +332,7 @@ async def log_interaction(
         created_by=current_user_id,
     )
     db.add(interaction)
-    await db.commit()
+    await db.flush()
     await db.refresh(interaction)
     return interaction
 

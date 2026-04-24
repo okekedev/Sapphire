@@ -54,7 +54,7 @@ async def save_upload(
         uploaded_by=uuid.UUID(user_id) if user_id else None,
     )
     db.add(row)
-    await db.commit()
+    await db.flush()
     await db.refresh(row)
     return row
 
@@ -90,7 +90,7 @@ async def delete_media(db: AsyncSession, business_id: str, media_id: str) -> boo
         full_path.unlink()
 
     await db.delete(row)
-    await db.commit()
+    await db.flush()
     return True
 
 
@@ -116,7 +116,7 @@ async def create_post(
         status="draft",
     )
     db.add(row)
-    await db.commit()
+    await db.flush()
     await db.refresh(row)
     return row
 
@@ -160,7 +160,7 @@ async def update_post(
         row.platform_targets = platform_targets
     if media_ids is not None:
         row.media_ids = [str(m) for m in media_ids]
-    await db.commit()
+    await db.flush()
     await db.refresh(row)
     return row
 
@@ -170,7 +170,7 @@ async def delete_post(db: AsyncSession, business_id: str, post_id: str) -> bool:
     if not row:
         return False
     await db.delete(row)
-    await db.commit()
+    await db.flush()
     return True
 
 
@@ -189,6 +189,6 @@ async def mark_posted(
         row.posted_by = uuid.UUID(employee_id)
     if platform_results:
         row.platform_results = platform_results
-    await db.commit()
+    await db.flush()
     await db.refresh(row)
     return row

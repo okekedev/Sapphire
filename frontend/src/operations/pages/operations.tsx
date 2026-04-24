@@ -5,7 +5,6 @@ import {
   Loader2,
   DollarSign,
   Briefcase,
-  Users,
   ChevronDown,
   Send,
   Play,
@@ -13,13 +12,16 @@ import {
   ArrowRight,
   ArrowLeft,
   StickyNote,
-  Download,
-  Search,
   Pencil,
   Save,
   Phone,
   RefreshCw,
-  BarChart2,
+  Users,
+  ClipboardList,
+  MapPin,
+  Calendar,
+  UserCheck,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { MarkdownMessage } from "@/shared/components/ui/markdown-message";
@@ -32,16 +34,20 @@ import { listEmployees, listDepartments } from "@/shared/api/organization";
 import { sendEmployeeChat } from "@/shared/api/chat";
 import {
   listCustomers,
-  createCustomer,
   listJobs,
   createJob,
   updateJob,
-  getSalesSummary,
   type JobItem,
   type JobListResponse,
   type CustomerItem,
 } from "@/sales/api/sales";
+import { listTemplates } from "@/operations/api/job-templates";
+import type { JobTemplate } from "@/operations/api/job-templates";
 import { DeptLayout, type DeptSection } from "@/shared/components/layout/dept-layout";
+import { StaffPanel } from "@/operations/components/staff-panel";
+import { TemplateBuilder } from "@/operations/components/template-builder";
+import { JobDispatchSheet } from "@/operations/components/job-dispatch-sheet";
+import { TemplateFillSheet } from "@/operations/components/template-fill-sheet";
 
 // ── Helpers ──
 
@@ -50,25 +56,31 @@ function formatMoney(amount: number | null | undefined): string {
   return `$${amount.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 }
 
-function formatDate(iso: string | null): string {
+function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-/** Strip priority/urgency prefixes like "HIGH PRIORITY:", "URGENT:", etc. */
+function formatDateTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 function stripPriority(text: string): string {
   return text.replace(/^(HIGH PRIORITY|PRIORITY|URGENT|LOW PRIORITY|MEDIUM PRIORITY)\s*[:—\-]\s*/i, "").trim();
 }
 
 const STATUS_CONFIG: Record<string, { bg: string; label: string }> = {
-  new: { bg: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300", label: "Not Started" },
-  in_progress: { bg: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300", label: "In Progress" },
-  completed: { bg: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300", label: "Completed" },
+  new:        { bg: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",       label: "Not Started" },
+  scheduled:  { bg: "bg-cyan-100 text-cyan-700 dark:bg-cyan-950 dark:text-cyan-300",       label: "Scheduled" },
+  dispatched: { bg: "bg-violet-100 text-violet-700 dark:bg-violet-950 dark:text-violet-300", label: "Dispatched" },
+  started:    { bg: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",   label: "In Progress" },
+  in_progress:{ bg: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",   label: "In Progress" },
+  completed:  { bg: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300", label: "Completed" },
+  billing:    { bg: "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300", label: "Billing" },
 };
 
-// ── Notes Section Component ──
-// Always visible on the card. Shows existing notes from DB + input to add new ones.
-// Sends to AI for cleanup, falls back to raw save if AI fails.
+// ── Notes Section ──
 
 function NotesSection({
   job,
@@ -97,30 +109,26 @@ function NotesSection({
     });
 
     try {
-      // Try AI cleanup first
       const jobContext = [
-        `[You are a job documentation assistant. The user is a field worker (plumber, electrician, contractor, etc.) logging notes about a job in progress. Your role is to take their rough notes — typos, shorthand, voice-to-text — and clean them into clear, professional job documentation. Keep the worker's voice and facts. Don't add opinions, strategy, or recommendations. Just format what they said into clean notes. Use short paragraphs, bullet points for lists of work done, and bold for key details. 2-4 sentences max unless they gave you a lot of detail. Return ONLY the cleaned note text, no preamble.]`,
+        `[You are a job documentation assistant. The user is a field worker logging notes about a job. Clean their rough notes into professional documentation. Keep their voice. No opinions or strategy. Use bullets for lists. 2-4 sentences max unless lots of detail. Return ONLY the cleaned note text.]`,
         `Job: ${job.title}`,
         `Customer: ${job.contact_name || "Unknown"}`,
         job.amount_quoted ? `Quote: $${job.amount_quoted.toLocaleString()}` : null,
-        job.notes ? `Existing notes for context (do NOT repeat these):\n${job.notes}` : null,
+        job.notes ? `Existing notes (do NOT repeat):\n${job.notes}` : null,
       ].filter(Boolean).join("\n");
 
       const res = await sendEmployeeChat({
         business_id: businessId,
         employee_id: employeeId,
         messages: [],
-        user_message: `${jobContext}\n\nNew field note to clean up: ${msg}`,
+        user_message: `${jobContext}\n\nNew field note: ${msg}`,
       });
 
       const noteEntry = `**${timestamp}**\n${res.content}`;
-      const updatedNotes = job.notes ? `${job.notes}\n\n---\n\n${noteEntry}` : noteEntry;
-      onUpdateNotes(updatedNotes);
+      onUpdateNotes(job.notes ? `${job.notes}\n\n---\n\n${noteEntry}` : noteEntry);
     } catch {
-      // Fallback: save raw note directly (no AI formatting)
       const noteEntry = `**${timestamp}**\n${msg}`;
-      const updatedNotes = job.notes ? `${job.notes}\n\n---\n\n${noteEntry}` : noteEntry;
-      onUpdateNotes(updatedNotes);
+      onUpdateNotes(job.notes ? `${job.notes}\n\n---\n\n${noteEntry}` : noteEntry);
     } finally {
       setSaving(false);
       inputRef.current?.focus();
@@ -132,8 +140,6 @@ function NotesSection({
       <p className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
         <StickyNote className="h-3 w-3" /> Field Notes
       </p>
-
-      {/* Existing notes from DB */}
       {job.notes ? (
         <div className="max-h-[200px] overflow-y-auto rounded-md bg-background/50 p-2.5">
           <div className="text-xs text-foreground/80 leading-relaxed [&_p]:my-1 [&_ul]:ml-4 [&_ol]:ml-4 [&_li]:my-0.5 [&_hr]:my-2 [&_hr]:border-border/50">
@@ -143,8 +149,6 @@ function NotesSection({
       ) : (
         <p className="text-[11px] text-muted-foreground italic">No notes yet</p>
       )}
-
-      {/* Input to add new note */}
       <div className="flex gap-1.5">
         <Input
           ref={inputRef}
@@ -168,21 +172,16 @@ function NotesSection({
   );
 }
 
-// ── Sales Handoff Section (collapsible) ──
+// ── Sales Summary (collapsible) ──
 
 function SalesSummarySection({ job }: { job: JobItem }) {
   const [expanded, setExpanded] = useState(false);
-
-  // Combine call_summary + lead_notes into one clean summary
   const combinedSummary = [job.call_summary, job.lead_notes].filter(Boolean).join("\n\n");
   if (!combinedSummary) return null;
 
   return (
     <div className="rounded-md border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-950/30 px-3 py-2">
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-1 w-full"
-      >
+      <button onClick={() => setExpanded(!expanded)} className="flex items-center gap-1 w-full">
         <ChevronDown className={cn("h-3 w-3 text-indigo-600 dark:text-indigo-400 transition-transform", expanded && "rotate-180")} />
         <span className="text-[10px] font-semibold uppercase text-indigo-600 dark:text-indigo-400">Sales Summary</span>
       </button>
@@ -195,23 +194,29 @@ function SalesSummarySection({ job }: { job: JobItem }) {
   );
 }
 
-// ── Job Card Component ──
+// ── Job Card ──
 
 function JobCard({
   job,
+  template,
   businessId,
   employeeId,
   onStatusChange,
   onUpdateNotes,
   onUpdateJob,
+  onOpenDispatch,
+  onOpenFillForm,
   isPending,
 }: {
   job: JobItem;
+  template: JobTemplate | null;
   businessId: string;
   employeeId: string;
   onStatusChange: (status: string) => void;
   onUpdateNotes: (notes: string) => void;
   onUpdateJob: (payload: { title?: string; amount_quoted?: number }) => void;
+  onOpenDispatch: () => void;
+  onOpenFillForm: () => void;
   isPending: boolean;
 }) {
   const [showEdit, setShowEdit] = useState(false);
@@ -219,6 +224,22 @@ function JobCard({
   const [editAmount, setEditAmount] = useState(job.amount_quoted?.toString() || "");
 
   const statusStyle = STATUS_CONFIG[job.status] || { bg: "bg-gray-100 text-gray-700", label: job.status };
+
+  const hasTemplate = !!job.template_id && !!template;
+  const needsDispatch = hasTemplate && template.requires_dispatch;
+
+  // Check if required template fields are filled (for "Complete" gate)
+  const requiredFieldIds = template?.schema.sections.flatMap(s =>
+    s.fields.filter(f => f.required).map(f => f.id)
+  ) ?? [];
+  const filledData = job.template_data ?? {};
+  const allRequiredFilled = requiredFieldIds.every(id => {
+    const val = filledData[id];
+    if (typeof val === "boolean") return val;
+    if (Array.isArray(val)) return val.length > 0;
+    return !!val && (typeof val !== "string" || val.trim() !== "");
+  });
+  const canComplete = !hasTemplate || requiredFieldIds.length === 0 || allRequiredFilled;
 
   return (
     <Card className="transition-shadow hover:shadow-md">
@@ -230,8 +251,7 @@ function JobCard({
             <p className="text-xs text-muted-foreground">{job.contact_name || "Unknown"}</p>
             {job.contact_phone && (
               <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                <Phone className="h-2.5 w-2.5" />
-                {job.contact_phone}
+                <Phone className="h-2.5 w-2.5" />{job.contact_phone}
               </p>
             )}
           </div>
@@ -244,27 +264,55 @@ function JobCard({
                 From Sales
               </span>
             )}
+            {hasTemplate && (
+              <span className="text-[10px] font-medium rounded-full px-2 py-0.5 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {template!.name}
+              </span>
+            )}
           </div>
         </div>
 
-        {/* Details row */}
+        {/* Details */}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
           {job.amount_quoted != null && (
             <span className="font-mono font-medium text-foreground">
-              <span className="text-muted-foreground font-normal">Sales Quote:</span> {formatMoney(job.amount_quoted)}
+              <span className="text-muted-foreground font-normal">Quote:</span> {formatMoney(job.amount_quoted)}
             </span>
           )}
-          <span><span className="text-muted-foreground">Date:</span> {formatDate(job.created_at)}</span>
+          <span><span className="text-muted-foreground">Created:</span> {formatDate(job.created_at)}</span>
           {job.started_at && <span>Started {formatDate(job.started_at)}</span>}
           {job.completed_at && <span>Done {formatDate(job.completed_at)}</span>}
         </div>
 
-        {/* Sales summary — collapsible */}
-        {(job.call_summary || job.lead_notes) && (
-          <SalesSummarySection job={job} />
+        {/* Assignment / scheduling info */}
+        {(job.assigned_to || job.service_address || job.scheduled_at) && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+            {job.assigned_to && (
+              <span className="flex items-center gap-1.5 text-foreground/80">
+                {job.assigned_staff_color && (
+                  <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: job.assigned_staff_color }} />
+                )}
+                <UserCheck className="h-3 w-3 text-muted-foreground" />
+                {job.assigned_staff_name ?? "Assigned"}
+              </span>
+            )}
+            {job.service_address && (
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <MapPin className="h-3 w-3" />{job.service_address}
+              </span>
+            )}
+            {job.scheduled_at && (
+              <span className="flex items-center gap-1 text-muted-foreground">
+                <Calendar className="h-3 w-3" />{formatDateTime(job.scheduled_at)}
+              </span>
+            )}
+          </div>
         )}
 
-        {/* Notes — always visible, reads/writes directly to DB */}
+        {/* Sales summary */}
+        {(job.call_summary || job.lead_notes) && <SalesSummarySection job={job} />}
+
+        {/* Notes */}
         <NotesSection
           job={job}
           businessId={businessId}
@@ -312,17 +360,45 @@ function JobCard({
 
         {/* Actions */}
         <div className="flex flex-wrap gap-1.5 pt-1">
-          {job.status === "new" && (
+          {/* Fill form button — always shown if template has fields */}
+          {hasTemplate && template!.schema.sections.some(s => s.fields.length > 0) && (
             <Button
               size="sm"
+              variant="outline"
               className="h-7 text-xs"
-              onClick={() => onStatusChange("in_progress")}
-              disabled={isPending}
+              onClick={onOpenFillForm}
             >
-              <Play className="h-3 w-3 mr-1" /> Start Job
+              <FileText className="h-3 w-3 mr-1" />
+              {allRequiredFilled ? "View Form ✓" : "Fill Form"}
             </Button>
           )}
-          {job.status === "in_progress" && (
+
+          {/* Status-based primary actions */}
+          {job.status === "new" && (
+            needsDispatch ? (
+              <Button size="sm" className="h-7 text-xs" onClick={onOpenDispatch} disabled={isPending}>
+                <Send className="h-3 w-3 mr-1" /> Assign & Dispatch
+              </Button>
+            ) : (
+              <Button size="sm" className="h-7 text-xs" onClick={() => onStatusChange("started")} disabled={isPending}>
+                <Play className="h-3 w-3 mr-1" /> Start Job
+              </Button>
+            )
+          )}
+
+          {job.status === "scheduled" && (
+            <Button size="sm" className="h-7 text-xs" onClick={onOpenDispatch} disabled={isPending}>
+              <Send className="h-3 w-3 mr-1" /> Dispatch
+            </Button>
+          )}
+
+          {job.status === "dispatched" && (
+            <Button size="sm" className="h-7 text-xs" onClick={() => onStatusChange("started")} disabled={isPending}>
+              <Play className="h-3 w-3 mr-1" /> Mark Started
+            </Button>
+          )}
+
+          {(job.status === "started" || job.status === "in_progress") && (
             <>
               <Button
                 size="sm"
@@ -337,19 +413,21 @@ function JobCard({
                 size="sm"
                 className="h-7 text-xs"
                 onClick={() => onStatusChange("completed")}
-                disabled={isPending}
+                disabled={isPending || !canComplete}
+                title={!canComplete ? "Fill required form fields first" : undefined}
               >
                 <CheckCircle2 className="h-3 w-3 mr-1" /> Complete
               </Button>
             </>
           )}
+
           {job.status === "completed" && (
             <>
               <Button
                 size="sm"
                 variant="outline"
                 className="h-7 text-xs"
-                onClick={() => onStatusChange("in_progress")}
+                onClick={() => onStatusChange("started")}
                 disabled={isPending}
               >
                 <ArrowLeft className="h-3 w-3 mr-1" /> In Progress
@@ -364,136 +442,13 @@ function JobCard({
               </Button>
             </>
           )}
-          {job.status !== "completed" && (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 text-xs"
-              onClick={() => setShowEdit(!showEdit)}
-            >
+
+          {job.status !== "completed" && job.status !== "billing" && (
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setShowEdit(!showEdit)}>
               <Pencil className="h-3 w-3 mr-1" /> Edit
             </Button>
           )}
         </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── Customer Table ──
-
-function CustomerTable({
-  customers,
-  isLoading,
-  search,
-  onSearchChange,
-  visibleCount,
-  onShowMore,
-  total,
-}: {
-  customers: CustomerItem[];
-  isLoading: boolean;
-  search: string;
-  onSearchChange: (v: string) => void;
-  visibleCount: number;
-  onShowMore: () => void;
-  total: number;
-}) {
-  const handleExport = () => {
-    const headers = ["Name", "Business", "Phone", "Email", "Status", "Jobs", "Revenue", "Created"];
-    const rows = customers.map((c) => [
-      c.full_name || "",
-      c.company_name || "",
-      c.phone || "",
-      c.email || "",
-      c.status,
-      c.job_count.toString(),
-      c.total_revenue.toString(),
-      c.created_at,
-    ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.map((v) => `"${v}"`).join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `customers-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  return (
-    <Card>
-      <CardContent className="p-0">
-        <div className="flex items-center justify-between border-b px-4 py-3">
-          <h2 className="text-sm font-semibold">
-            Customers
-            <span className="ml-2 text-xs font-normal text-muted-foreground">{total} total</span>
-          </h2>
-          <div className="flex items-center gap-2">
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-              <Input
-                value={search}
-                onChange={(e) => onSearchChange(e.target.value)}
-                placeholder="Search..."
-                className="text-xs h-7 pl-7 w-48"
-              />
-            </div>
-            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleExport}>
-              <Download className="h-3 w-3 mr-1" /> Export
-            </Button>
-          </div>
-        </div>
-
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : customers.length === 0 ? (
-          <div className="py-12 text-center text-sm text-muted-foreground">
-            No customers yet. Customers are created when leads are converted.
-          </div>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
-                    <th className="px-3 py-2 text-left">Name</th>
-                    <th className="px-3 py-2 text-left">Business</th>
-                    <th className="px-3 py-2 text-left">Phone</th>
-                    <th className="px-3 py-2 text-left">Email</th>
-                    <th className="px-3 py-2 text-left">Jobs</th>
-                    <th className="px-3 py-2 text-left">Revenue</th>
-                    <th className="px-3 py-2 text-left">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customers.slice(0, visibleCount).map((c) => (
-                    <tr key={c.id} className="border-b transition hover:bg-muted/30">
-                      <td className="px-3 py-2.5 font-medium">{c.full_name || "—"}</td>
-                      <td className="px-3 py-2.5 text-xs">{c.company_name || "—"}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono">{c.phone || "—"}</td>
-                      <td className="px-3 py-2.5 text-xs">{c.email || "—"}</td>
-                      <td className="px-3 py-2.5 text-xs">{c.job_count}</td>
-                      <td className="px-3 py-2.5 text-xs font-mono font-semibold text-emerald-600">
-                        {formatMoney(c.total_revenue)}
-                      </td>
-                      <td className="px-3 py-2.5 text-xs text-muted-foreground">{formatDate(c.created_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {customers.length > visibleCount && (
-              <div className="px-4 py-3 border-t">
-                <Button size="sm" variant="ghost" className="text-xs w-full" onClick={onShowMore}>
-                  Show more ({customers.length - visibleCount} remaining)
-                </Button>
-              </div>
-            )}
-          </>
-        )}
       </CardContent>
     </Card>
   );
@@ -504,13 +459,15 @@ function CustomerTable({
 function NewJobForm({
   customers,
   customersLoading,
+  templates,
   onSubmit,
   onCancel,
   isPending,
 }: {
   customers: CustomerItem[];
   customersLoading: boolean;
-  onSubmit: (data: { contact_id: string; title: string; description?: string; amount_quoted?: number }) => void;
+  templates: JobTemplate[];
+  onSubmit: (data: { contact_id: string; title: string; description?: string; amount_quoted?: number; template_id?: string }) => void;
   onCancel: () => void;
   isPending: boolean;
 }) {
@@ -518,6 +475,7 @@ function NewJobForm({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [templateId, setTemplateId] = useState("");
 
   return (
     <Card>
@@ -556,6 +514,18 @@ function NewJobForm({
             className="text-sm h-8 font-mono"
             type="number"
           />
+          {templates.length > 0 && (
+            <select
+              value={templateId}
+              onChange={(e) => setTemplateId(e.target.value)}
+              className="h-8 rounded-md border bg-background px-2 text-sm sm:col-span-2"
+            >
+              <option value="">No template</option>
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div className="flex gap-2">
           <Button
@@ -568,56 +538,12 @@ function NewJobForm({
                 title,
                 description: description || undefined,
                 amount_quoted: amount ? parseFloat(amount) : undefined,
+                template_id: templateId || undefined,
               })
             }
           >
             {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
             Create Job
-          </Button>
-          <Button size="sm" variant="ghost" className="h-8" onClick={onCancel}>
-            Cancel
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-// ── New Customer Form ──
-
-function NewCustomerForm({
-  onSubmit,
-  onCancel,
-  isPending,
-}: {
-  onSubmit: (data: { full_name: string; company_name?: string; phone?: string; email?: string }) => void;
-  onCancel: () => void;
-  isPending: boolean;
-}) {
-  const [name, setName] = useState("");
-  const [companyName, setCompanyName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-
-  return (
-    <Card>
-      <CardContent className="p-4 space-y-3">
-        <p className="text-sm font-semibold">New Customer</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name *" className="text-sm h-8" />
-          <Input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Business name" className="text-sm h-8" />
-          <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone" className="text-sm h-8" />
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" className="text-sm h-8" />
-        </div>
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            className="h-8"
-            disabled={!name || isPending}
-            onClick={() => onSubmit({ full_name: name, company_name: companyName || undefined, phone: phone || undefined, email: email || undefined })}
-          >
-            {isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
-            Add Customer
           </Button>
           <Button size="sm" variant="ghost" className="h-8" onClick={onCancel}>
             Cancel
@@ -634,23 +560,29 @@ function PipelineColumn({
   title,
   count,
   jobs,
+  templates,
   businessId,
   employeeId,
   isLoading,
   onStatusChange,
   onUpdateNotes,
   onUpdateJob,
+  onOpenDispatch,
+  onOpenFillForm,
   pendingJobId,
 }: {
   title: string;
   count: number;
   jobs: JobItem[];
+  templates: JobTemplate[];
   businessId: string;
   employeeId: string;
   isLoading: boolean;
   onStatusChange: (jobId: string, status: string) => void;
   onUpdateNotes: (jobId: string, notes: string) => void;
   onUpdateJob: (jobId: string, payload: { title?: string; amount_quoted?: number }) => void;
+  onOpenDispatch: (jobId: string) => void;
+  onOpenFillForm: (jobId: string) => void;
   pendingJobId: string | null;
 }) {
   return (
@@ -669,18 +601,26 @@ function PipelineColumn({
         </div>
       ) : (
         <div className="space-y-3">
-          {jobs.map((job) => (
-            <JobCard
-              key={job.id}
-              job={job}
-              businessId={businessId}
-              employeeId={employeeId}
-              onStatusChange={(status) => onStatusChange(job.id, status)}
-              onUpdateNotes={(notes) => onUpdateNotes(job.id, notes)}
-              onUpdateJob={(payload) => onUpdateJob(job.id, payload)}
-              isPending={pendingJobId === job.id}
-            />
-          ))}
+          {jobs.map((job) => {
+            const template = job.template_id
+              ? templates.find((t) => t.id === job.template_id) ?? null
+              : null;
+            return (
+              <JobCard
+                key={job.id}
+                job={job}
+                template={template}
+                businessId={businessId}
+                employeeId={employeeId}
+                onStatusChange={(status) => onStatusChange(job.id, status)}
+                onUpdateNotes={(notes) => onUpdateNotes(job.id, notes)}
+                onUpdateJob={(payload) => onUpdateJob(job.id, payload)}
+                onOpenDispatch={() => onOpenDispatch(job.id)}
+                onOpenFillForm={() => onOpenFillForm(job.id)}
+                isPending={pendingJobId === job.id}
+              />
+            );
+          })}
         </div>
       )}
     </div>
@@ -695,65 +635,47 @@ export default function OperationsPage() {
   const queryClient = useQueryClient();
 
   const [showNewJob, setShowNewJob] = useState(false);
-  const [showNewCustomer, setShowNewCustomer] = useState(false);
-  const [customerSearch, setCustomerSearch] = useState("");
-  const [customerVisible, setCustomerVisible] = useState(5);
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingChatMessage, setPendingChatMessage] = useState<string | null>(null);
+  const [dispatchJobId, setDispatchJobId] = useState<string | null>(null);
+  const [fillFormJobId, setFillFormJobId] = useState<string | null>(null);
 
   // ── Queries ──
 
-  const summaryQuery = useQuery({
-    queryKey: ["ops-summary", businessId],
-    queryFn: () => getSalesSummary(businessId!),
-    enabled: !!businessId,
-  });
-
-  const newJobsQuery = useQuery({
-    queryKey: ["ops-jobs", businessId, "new"],
-    queryFn: () => listJobs(businessId!, { status: "new", limit: 100 }),
+  const jobsQuery = useQuery({
+    queryKey: ["ops-jobs", businessId],
+    queryFn: () => listJobs(businessId!, { limit: 200 }),
     enabled: !!businessId,
     refetchOnWindowFocus: true,
     staleTime: 30_000,
   });
 
-  const inProgressJobsQuery = useQuery({
-    queryKey: ["ops-jobs", businessId, "in_progress"],
-    queryFn: () => listJobs(businessId!, { status: "in_progress", limit: 100 }),
-    enabled: !!businessId,
-    refetchOnWindowFocus: true,
-    staleTime: 30_000,
-  });
+  const allJobs = jobsQuery.data?.jobs ?? [];
 
-  const completedJobsQuery = useQuery({
-    queryKey: ["ops-jobs", businessId, "completed"],
-    queryFn: () => listJobs(businessId!, { status: "completed", limit: 100 }),
-    enabled: !!businessId,
-    refetchOnWindowFocus: true,
-    staleTime: 30_000,
-  });
+  // Client-side column buckets
+  const newJobs        = allJobs.filter(j => j.status === "new" || j.status === "scheduled");
+  const inProgressJobs = allJobs.filter(j => ["dispatched", "started", "in_progress"].includes(j.status));
+  const completedJobs  = allJobs.filter(j => j.status === "completed");
 
-  const customersQuery = useQuery({
-    queryKey: ["ops-customers", businessId, customerSearch],
-    queryFn: () => listCustomers(businessId!, { status: "active_customer", search: customerSearch || undefined, limit: 200 }),
-    enabled: !!businessId,
-  });
-
-  // All customers for the new job dropdown
   const allCustomersQuery = useQuery({
     queryKey: ["ops-all-customers", businessId],
     queryFn: () => listCustomers(businessId!, { limit: 200 }),
     enabled: !!businessId && showNewJob,
   });
 
-  // Find Operations department + head employee (Dana)
+  const templatesQuery = useQuery({
+    queryKey: ["job-templates", businessId],
+    queryFn: () => listTemplates(businessId!),
+    enabled: !!businessId,
+  });
+  const templates = templatesQuery.data ?? [];
+
   const departmentsQuery = useQuery({
     queryKey: ["ops-departments", businessId],
     queryFn: () => listDepartments(businessId!),
     enabled: !!businessId,
   });
-
   const opsDept = departmentsQuery.data?.find((d) => d.name === "Operations");
 
   const employeesQuery = useQuery({
@@ -761,77 +683,36 @@ export default function OperationsPage() {
     queryFn: () => listEmployees({ business_id: businessId!, department_id: opsDept!.id }),
     enabled: !!businessId && !!opsDept?.id,
   });
-
   const dana = employeesQuery.data?.find((e) => e.is_head);
 
   // ── Mutations ──
 
-  const invalidateJobs = () => {
-    queryClient.invalidateQueries({ queryKey: ["ops-jobs"] });
-    queryClient.invalidateQueries({ queryKey: ["ops-summary"] });
-  };
+  const invalidateJobs = () => queryClient.invalidateQueries({ queryKey: ["ops-jobs", businessId] });
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["ops-jobs"] }),
-      queryClient.invalidateQueries({ queryKey: ["ops-summary"] }),
-      queryClient.invalidateQueries({ queryKey: ["ops-customers"] }),
-    ]);
+    await queryClient.invalidateQueries({ queryKey: ["ops-jobs", businessId] });
     setTimeout(() => setIsRefreshing(false), 600);
   };
 
   const updateJobMutation = useMutation({
-    mutationFn: ({ id, ...payload }: { id: string; status?: string; notes?: string; title?: string; amount_quoted?: number }) =>
+    mutationFn: ({ id, ...payload }: { id: string; status?: string; notes?: string; title?: string; amount_quoted?: number; template_data?: Record<string, unknown> }) =>
       updateJob(businessId!, id, payload),
     onMutate: async (vars) => {
       setPendingJobId(vars.id);
-
       if (vars.status) {
-        await queryClient.cancelQueries({ queryKey: ["ops-jobs"] });
-
-        const prevNew = queryClient.getQueryData<JobListResponse>(["ops-jobs", businessId, "new"]);
-        const prevProgress = queryClient.getQueryData<JobListResponse>(["ops-jobs", businessId, "in_progress"]);
-        const prevCompleted = queryClient.getQueryData<JobListResponse>(["ops-jobs", businessId, "completed"]);
-
-        const allJobs = [
-          ...(prevNew?.jobs || []),
-          ...(prevProgress?.jobs || []),
-          ...(prevCompleted?.jobs || []),
-        ];
-        const job = allJobs.find((j) => j.id === vars.id);
-
-        if (job) {
-          const updatedJob = { ...job, status: vars.status };
-
-          const removeFrom = (data: JobListResponse | undefined): JobListResponse => {
-            if (!data) return { jobs: [], total: 0 };
-            const filtered = data.jobs.filter((j) => j.id !== vars.id);
-            return { ...data, jobs: filtered, total: filtered.length };
-          };
-          const addTo = (data: JobListResponse | undefined): JobListResponse => {
-            if (!data) return { jobs: [updatedJob], total: 1 };
-            return { ...data, jobs: [updatedJob, ...data.jobs.filter((j) => j.id !== vars.id)], total: data.jobs.filter((j) => j.id !== vars.id).length + 1 };
-          };
-
-          queryClient.setQueryData<JobListResponse>(["ops-jobs", businessId, "new"],
-            vars.status === "new" ? addTo(prevNew) : removeFrom(prevNew));
-          queryClient.setQueryData<JobListResponse>(["ops-jobs", businessId, "in_progress"],
-            vars.status === "in_progress" ? addTo(prevProgress) : removeFrom(prevProgress));
-          queryClient.setQueryData<JobListResponse>(["ops-jobs", businessId, "completed"],
-            vars.status === "completed" ? addTo(prevCompleted) : removeFrom(prevCompleted));
-        }
-
-        return { prevNew, prevProgress, prevCompleted };
+        await queryClient.cancelQueries({ queryKey: ["ops-jobs", businessId] });
+        const prev = queryClient.getQueryData<JobListResponse>(["ops-jobs", businessId]);
+        queryClient.setQueryData<JobListResponse>(["ops-jobs", businessId], (old) => {
+          if (!old) return old;
+          return { ...old, jobs: old.jobs.map(j => j.id === vars.id ? { ...j, status: vars.status! } : j) };
+        });
+        return { prev };
       }
       return {};
     },
-    onError: (_err, vars, context: any) => {
-      if (context?.prevNew !== undefined) {
-        queryClient.setQueryData(["ops-jobs", businessId, "new"], context.prevNew);
-        queryClient.setQueryData(["ops-jobs", businessId, "in_progress"], context.prevProgress);
-        queryClient.setQueryData(["ops-jobs", businessId, "completed"], context.prevCompleted);
-      }
+    onError: (_err, _vars, context: { prev?: JobListResponse } | undefined) => {
+      if (context?.prev) queryClient.setQueryData(["ops-jobs", businessId], context.prev);
     },
     onSettled: () => {
       setPendingJobId(null);
@@ -840,71 +721,74 @@ export default function OperationsPage() {
   });
 
   const createJobMutation = useMutation({
-    mutationFn: (payload: { contact_id: string; title: string; description?: string; amount_quoted?: number }) =>
+    mutationFn: (payload: { contact_id: string; title: string; description?: string; amount_quoted?: number; template_id?: string }) =>
       createJob(businessId!, payload),
-    onSuccess: () => {
-      invalidateJobs();
-      setShowNewJob(false);
-    },
+    onSuccess: () => { invalidateJobs(); setShowNewJob(false); },
   });
 
-  const createCustomerMutation = useMutation({
-    mutationFn: (payload: { full_name: string; phone?: string; email?: string }) =>
-      createCustomer(businessId!, { ...payload, status: "active_customer" }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["ops-customers"] });
-      queryClient.invalidateQueries({ queryKey: ["ops-all-customers"] });
-      queryClient.invalidateQueries({ queryKey: ["ops-summary"] });
-      setShowNewCustomer(false);
-    },
+  const dispatchMutation = useMutation({
+    mutationFn: ({ jobId, ...payload }: { jobId: string; assigned_to: string; service_address?: string; scheduled_at?: string }) =>
+      updateJob(businessId!, jobId, payload),
+    onSuccess: () => { invalidateJobs(); setDispatchJobId(null); },
   });
 
-  const summary = summaryQuery.data;
-  const newJobs = newJobsQuery.data?.jobs || [];
-  const inProgressJobs = inProgressJobsQuery.data?.jobs || [];
-  const completedJobs = completedJobsQuery.data?.jobs || [];
-  const customers = customersQuery.data?.customers || [];
+  const fillFormMutation = useMutation({
+    mutationFn: ({ jobId, templateData }: { jobId: string; templateData: Record<string, unknown> }) =>
+      updateJob(businessId!, jobId, { template_data: templateData }),
+    onSuccess: () => { invalidateJobs(); setFillFormJobId(null); },
+  });
+
+  // Sheet data
+  const dispatchJob     = dispatchJobId ? allJobs.find(j => j.id === dispatchJobId) ?? null : null;
+  const dispatchTemplate = dispatchJob?.template_id ? templates.find(t => t.id === dispatchJob.template_id) ?? null : null;
+  const fillFormJob     = fillFormJobId ? allJobs.find(j => j.id === fillFormJobId) ?? null : null;
+  const fillFormTemplate = fillFormJob?.template_id ? templates.find(t => t.id === fillFormJob.template_id) ?? null : null;
+
   const activeJobCount = newJobs.length + inProgressJobs.length;
+  const totalQuoted    = allJobs.reduce((sum, j) => sum + (j.amount_quoted || 0), 0);
 
   // ── Section content ──
 
   const jobsContent = (
     <div className="space-y-4">
-      {/* Toolbar */}
-      <div className="flex items-center gap-2 justify-end">
-        <Button
-          size="sm"
-          variant="ghost"
-          className="h-7 w-7 p-0"
-          onClick={handleRefresh}
-          disabled={isRefreshing}
-          title="Refresh"
-        >
-          <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
-        </Button>
-        <Button size="sm" className="h-7 text-xs" onClick={() => setShowNewJob(!showNewJob)}>
-          <Plus className="h-3 w-3 mr-1" /> New Job
-        </Button>
-        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setShowNewCustomer(!showNewCustomer)}>
-          <Plus className="h-3 w-3 mr-1" /> New Customer
-        </Button>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-4 text-sm">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <DollarSign className="h-3.5 w-3.5" />
+            <span className="font-semibold text-foreground">{formatMoney(totalQuoted)}</span>
+            <span className="text-xs">total quoted</span>
+          </span>
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Briefcase className="h-3.5 w-3.5" />
+            <span className="font-semibold text-foreground">{activeJobCount}</span>
+            <span className="text-xs">open</span>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 w-7 p-0"
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            title="Refresh"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
+          </Button>
+          <Button size="sm" className="h-7 text-xs" onClick={() => setShowNewJob(!showNewJob)}>
+            <Plus className="h-3 w-3 mr-1" /> New Job
+          </Button>
+        </div>
       </div>
 
       {showNewJob && (
         <NewJobForm
           customers={allCustomersQuery.data?.customers || []}
           customersLoading={allCustomersQuery.isLoading}
+          templates={templates}
           onSubmit={(data) => createJobMutation.mutate(data)}
           onCancel={() => setShowNewJob(false)}
           isPending={createJobMutation.isPending}
-        />
-      )}
-
-      {showNewCustomer && (
-        <NewCustomerForm
-          onSubmit={(data) => createCustomerMutation.mutate(data)}
-          onCancel={() => setShowNewCustomer(false)}
-          isPending={createCustomerMutation.isPending}
         />
       )}
 
@@ -913,78 +797,48 @@ export default function OperationsPage() {
           title="Not Started"
           count={newJobs.length}
           jobs={newJobs}
+          templates={templates}
           businessId={businessId}
           employeeId={dana?.id ?? ""}
-          isLoading={newJobsQuery.isLoading}
+          isLoading={jobsQuery.isLoading}
           onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
           onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
           onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
+          onOpenDispatch={setDispatchJobId}
+          onOpenFillForm={setFillFormJobId}
           pendingJobId={pendingJobId}
         />
         <PipelineColumn
           title="In Progress"
           count={inProgressJobs.length}
           jobs={inProgressJobs}
+          templates={templates}
           businessId={businessId}
           employeeId={dana?.id ?? ""}
-          isLoading={inProgressJobsQuery.isLoading}
+          isLoading={jobsQuery.isLoading}
           onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
           onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
           onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
+          onOpenDispatch={setDispatchJobId}
+          onOpenFillForm={setFillFormJobId}
           pendingJobId={pendingJobId}
         />
         <PipelineColumn
           title="Completed"
           count={completedJobs.length}
           jobs={completedJobs}
+          templates={templates}
           businessId={businessId}
           employeeId={dana?.id ?? ""}
-          isLoading={completedJobsQuery.isLoading}
+          isLoading={jobsQuery.isLoading}
           onStatusChange={(jobId, status) => updateJobMutation.mutate({ id: jobId, status })}
           onUpdateNotes={(jobId, notes) => updateJobMutation.mutate({ id: jobId, notes })}
           onUpdateJob={(jobId, payload) => updateJobMutation.mutate({ id: jobId, ...payload })}
+          onOpenDispatch={setDispatchJobId}
+          onOpenFillForm={setFillFormJobId}
           pendingJobId={pendingJobId}
         />
       </div>
-
-      <CustomerTable
-        customers={customers}
-        isLoading={customersQuery.isLoading}
-        search={customerSearch}
-        onSearchChange={(v) => { setCustomerSearch(v); setCustomerVisible(5); }}
-        visibleCount={customerVisible}
-        onShowMore={() => setCustomerVisible((prev) => prev + 10)}
-        total={customersQuery.data?.total || 0}
-      />
-    </div>
-  );
-
-  const summaryContent = (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-            <DollarSign className="h-3.5 w-3.5" /> Job Value
-          </div>
-          <p className="mt-1 text-2xl font-bold">{formatMoney(summary?.total_quoted)}</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-            <Briefcase className="h-3.5 w-3.5" /> Open Jobs
-          </div>
-          <p className="mt-1 text-2xl font-bold">{summary?.active_jobs || 0}</p>
-        </CardContent>
-      </Card>
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase">
-            <Users className="h-3.5 w-3.5" /> Customers
-          </div>
-          <p className="mt-1 text-2xl font-bold">{summary?.total_customers || 0}</p>
-        </CardContent>
-      </Card>
     </div>
   );
 
@@ -997,18 +851,24 @@ export default function OperationsPage() {
       content: jobsContent,
     },
     {
-      id: "summary",
-      label: "Summary",
-      icon: <BarChart2 />,
-      content: summaryContent,
+      id: "team",
+      label: "Team",
+      icon: <Users />,
+      content: <StaffPanel businessId={businessId} />,
+    },
+    {
+      id: "templates",
+      label: "Templates",
+      icon: <ClipboardList />,
+      content: <TemplateBuilder businessId={businessId} />,
     },
   ];
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-4 md:p-6 space-y-4">
       <PageHeader
-        title="Operations"
-        description="Job management, progress tracking, and customer operations"
+        title="Jobs"
+        description="Job pipeline, progress tracking, and field dispatch"
       />
       <DeptLayout
         sections={sections}
@@ -1017,6 +877,31 @@ export default function OperationsPage() {
         pendingMessage={pendingChatMessage}
         onPendingConsumed={() => setPendingChatMessage(null)}
       />
+
+      {/* Dispatch sheet */}
+      {dispatchJob && (
+        <JobDispatchSheet
+          job={dispatchJob}
+          template={dispatchTemplate}
+          businessId={businessId}
+          onDispatch={({ assigned_to, service_address, scheduled_at }) =>
+            dispatchMutation.mutate({ jobId: dispatchJob.id, assigned_to, service_address, scheduled_at })
+          }
+          onClose={() => setDispatchJobId(null)}
+          isPending={dispatchMutation.isPending}
+        />
+      )}
+
+      {/* Fill form sheet */}
+      {fillFormJob && fillFormTemplate && (
+        <TemplateFillSheet
+          template={fillFormTemplate}
+          initialData={fillFormJob.template_data ?? undefined}
+          onSave={(data) => fillFormMutation.mutate({ jobId: fillFormJob.id, templateData: data })}
+          onClose={() => setFillFormJobId(null)}
+          isPending={fillFormMutation.isPending}
+        />
+      )}
     </div>
   );
 }

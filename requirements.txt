@@ -1,8 +1,9 @@
 # Sapphire — pinned requirements (last updated 2026-03-28)
 # To update: pip install --upgrade <package> && pip freeze > check, then update here.
-# stripe and starlette held back — major version breaks (15.x and 1.x respectively).
+# stripe and starlette held back — major version breaks (stripe 15.x; starlette 1.x breaks asyncpg DDL validation).
 
 # --- Core Framework ---
+starlette==0.46.2
 fastapi==0.135.2
 pydantic[email]==2.12.5
 pydantic-settings==2.13.1
@@ -48,7 +49,7 @@ azure-ai-projects==2.0.1
 msal==1.35.1
 
 # --- AI ---
-openai==2.30.0
+openai==2.8.0
 
 # --- Utilities ---
 python-dotenv==1.2.2

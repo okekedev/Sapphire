@@ -264,7 +264,6 @@ async def disposition_call(
             pass
 
     await db.flush()
-    await db.commit()
 
     return {
         "status": "ok",
@@ -421,7 +420,7 @@ async def reroute_call(
     meta["ai_process_output"] = None
     interaction.metadata_ = meta
 
-    await db.commit()
+    await db.flush()
 
     return {
         "status": "ok",
@@ -483,7 +482,7 @@ async def process_call_with_ai(
     updated_meta["ai_process_output"] = output.get("output")
     updated_meta["ai_processed_by"] = output.get("employee")
     interaction.metadata_ = updated_meta
-    await db.commit()
+    await db.flush()
 
     return ProcessCallResponse(**output)
 
@@ -653,9 +652,6 @@ async def _build_departments_config(db: AsyncSession, business_id: UUID):
             forward_number=d.forward_number,
             enabled=d.enabled,
             sms_enabled=d.sms_enabled,
-            whatsapp_enabled=d.whatsapp_enabled,
-            whatsapp_sender_sid=d.whatsapp_sender_sid,
-            whatsapp_sender_status=d.whatsapp_sender_status or "none",
         )
         for d in departments
     ]
@@ -686,7 +682,7 @@ async def get_phone_settings(
             after_hours_enabled=False,
         )
         db.add(settings)
-        await db.commit()
+        await db.flush()
         await db.refresh(settings)
 
     # Build departments_config from departments table
@@ -752,8 +748,6 @@ async def update_phone_settings(
                 dept.enabled = enabled
                 if "sms_enabled" in rule:
                     dept.sms_enabled = rule["sms_enabled"]
-                if "whatsapp_enabled" in rule:
-                    dept.whatsapp_enabled = rule["whatsapp_enabled"]
 
     # Convert time strings ("HH:MM") to Python time objects before applying
     from datetime import time as dt_time
@@ -799,7 +793,7 @@ async def update_phone_settings(
         elif settings.after_hours_action == "forward" and not settings.after_hours_forward_number:
             settings.after_hours_enabled = False
 
-    await db.commit()
+    await db.flush()
     await db.refresh(settings)
 
     # Build departments_config from departments table for the response

@@ -165,7 +165,7 @@ async def inbound_email_webhook(request: Request, db: AsyncSession = Depends(get
     )
     db.add(interaction)
     await db.flush()
-    await db.commit()
+    await db.flush()
 
     return {"status": "received", "interaction_id": str(interaction.id)}
 

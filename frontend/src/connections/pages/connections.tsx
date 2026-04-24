@@ -120,7 +120,7 @@ export default function ConnectionsPage() {
   );
 
   return (
-    <div>
+    <div className="p-4 md:p-6">
       <PageHeader
         title="Connections"
         description="Connect your platforms so the automation platform can manage your marketing, analytics, and outreach."

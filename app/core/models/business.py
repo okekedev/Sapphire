@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import String, Text, DateTime, ForeignKey, UniqueConstraint, text
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -62,13 +62,9 @@ class BusinessMember(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    # is_owner: True for the business creator; False for all invited members.
-    # Owners always bypass tab restrictions (allowed_tabs is ignored for them).
+    # is_owner: True for the business creator — used for cascading ownership logic.
+    # Permissions are fully role-based via business_member_roles.
     is_owner: Mapped[bool] = mapped_column(nullable=False, server_default="false")
-    # allowed_tabs: list of tab paths this member can see.
-    # NULL means all tabs. Ignored when is_owner=True.
-    # e.g. ["/leads", "/customers", "/conversations"]
-    allowed_tabs: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True, default=None)
     invited_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
@@ -79,3 +75,4 @@ class BusinessMember(Base):
     # Relationships
     business = relationship("Business", back_populates="members")
     user = relationship("User", back_populates="memberships", foreign_keys=[user_id])
+    roles_assoc = relationship("BusinessMemberRole", back_populates="member", cascade="all, delete-orphan", lazy="selectin")

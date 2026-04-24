@@ -26,6 +26,8 @@ export interface CustomerItem {
   score: string | null;
   duration_s: number | null;
   campaign_name: string | null;
+  assigned_to?: string | null;
+  assigned_user_name?: string | null;
 }
 
 export interface CustomerListResponse {
@@ -41,10 +43,21 @@ export interface JobItem {
   source?: string | null;  // "sales" when converted from lead
   title: string;
   description: string | null;
-  status: string; // new | in_progress | completed | billed
+  status: string; // new | scheduled | dispatched | started | completed | billing
   notes: string | null;
   amount_quoted: number | null;
   amount_billed: number | null;
+  // Template
+  template_id?: string | null;
+  template_data?: Record<string, unknown> | null;
+  // Assignment + scheduling
+  assigned_to?: string | null;
+  assigned_staff_name?: string | null;
+  assigned_staff_color?: string | null;
+  service_address?: string | null;
+  scheduled_at?: string | null;
+  dispatched_at?: string | null;
+  // Timestamps
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
@@ -92,6 +105,17 @@ export async function createCustomer(
   return res.data;
 }
 
+export async function assignLead(
+  businessId: string,
+  contactId: string,
+  userId: string | null,
+): Promise<CustomerItem> {
+  const res = await client.patch(`/sales/customers/${contactId}`, { assigned_to: userId }, {
+    params: { business_id: businessId },
+  });
+  return res.data;
+}
+
 export async function updateCustomer(
   businessId: string,
   customerId: string,
@@ -115,7 +139,7 @@ export async function listJobs(
 
 export async function createJob(
   businessId: string,
-  payload: { contact_id: string; title: string; description?: string; notes?: string; amount_quoted?: number },
+  payload: { contact_id: string; title: string; description?: string; notes?: string; amount_quoted?: number; template_id?: string; service_address?: string },
 ): Promise<JobItem> {
   const res = await client.post("/sales/jobs", payload, {
     params: { business_id: businessId },
@@ -126,7 +150,7 @@ export async function createJob(
 export async function updateJob(
   businessId: string,
   jobId: string,
-  payload: { title?: string; description?: string; status?: string; notes?: string; amount_quoted?: number; amount_billed?: number },
+  payload: { title?: string; description?: string; status?: string; notes?: string; amount_quoted?: number; amount_billed?: number; template_id?: string; template_data?: Record<string, unknown>; assigned_to?: string; service_address?: string; scheduled_at?: string },
 ): Promise<JobItem> {
   const res = await client.patch(`/sales/jobs/${jobId}`, payload, {
     params: { business_id: businessId },
@@ -238,10 +262,6 @@ export async function getPipelineSummary(
 
 // ── Review types ──
 
-export interface CloseLeadResponse {
-  status: string;
-  contact_id: string;
-}
 
 export interface ReviewItem {
   interaction_id: string;
@@ -277,15 +297,3 @@ export async function listReviewed(
   return res.data;
 }
 
-export async function closeLead(
-  businessId: string,
-  contactId: string,
-  reason?: string,
-): Promise<CloseLeadResponse> {
-  const res = await client.patch(
-    `/sales/leads/${contactId}/close`,
-    { reason },
-    { params: { business_id: businessId } },
-  );
-  return res.data;
-}

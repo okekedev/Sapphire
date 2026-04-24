@@ -426,7 +426,7 @@ async def get_conversation(
     # Mark as read when opened
     if not conversation.is_read:
         conversation.is_read = True
-        await db.commit()
+        await db.flush()
 
     return ConversationDetailOut(
         id=conversation.id,

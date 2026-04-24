@@ -4,7 +4,6 @@
   "parameters": {
     "azureAdTenantId":       { "value": "YOUR_TENANT_ID" },
     "azureAdClientId":       { "value": "YOUR_AZURE_AD_CLIENT_ID" },
-    "azureAdGroupId":        { "value": "YOUR_SAPPHIRE_USERS_GROUP_OBJECT_ID" },
     "azureAdRedirectUri":    { "value": "https://swa-sapphire-prod.azurestaticapps.net/auth/callback" },
     "frontendUrl":           { "value": "https://swa-sapphire-prod.azurestaticapps.net" },
 
@@ -17,8 +16,6 @@
     "metaAppSecret":         { "value": "FROM_META_DEVELOPER_PORTAL" },
     "microsoftClientSecret": { "value": "FROM_AZURE_PORTAL_APP_REGISTRATION" },
     "linkedinClientSecret":  { "value": "FROM_LINKEDIN_DEVELOPER_PORTAL" },
-    "twitterClientSecret":   { "value": "FROM_TWITTER_DEVELOPER_PORTAL" },
-    "tiktokClientSecret":    { "value": "FROM_TIKTOK_DEVELOPER_PORTAL" },
     "applyraApiKey":         { "value": "FROM_APPLYRA_DASHBOARD" },
 
     "ghcrUsername":          { "value": "okekedev" },

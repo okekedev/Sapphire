@@ -5,7 +5,6 @@ Authentication routes — registration, login, token refresh, Azure AD SSO.
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from azure.identity.aio import DefaultAzureCredential as AsyncDefaultAzureCredential
 from azure.identity.aio import ManagedIdentityCredential as AsyncManagedIdentityCredential
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
@@ -18,6 +17,7 @@ from app.core.schemas.auth import (
     LoginRequest,
     RegisterRequest,
     TokenResponse,
+    MeResponse,
 )
 import structlog
 from app.core.services.auth_service import AuthService
@@ -38,10 +38,10 @@ async def _get_uami_assertion() -> str:
 async def _get_client_credential():
     """Return the MSAL client_credential dict/string.
 
-    Production (UAMI set): federated assertion via IMDS — no secret ever stored.
-    Local dev (UAMI absent): plain client secret loaded from Key Vault via az login.
+    Production (UAMI set + is_production): federated assertion via IMDS — no secret ever stored.
+    Local dev: plain client secret loaded from Key Vault via az login.
     """
-    if settings.uami_client_id:
+    if settings.uami_client_id and settings.is_production:
         assertion = await _get_uami_assertion()
         return {"client_assertion": assertion}
     if settings.azure_ad_client_secret:
@@ -124,11 +124,31 @@ async def microsoft_exchange(
 ):
     """Exchange an Azure AD authorization code for app JWT tokens.
 
-    Called via fetch() from the frontend /auth/callback page after Microsoft
-    redirects the browser there with ?code=...&state=... The redirect_uri is
-    the frontend route itself (not an /api/ path) so SWA serves index.html for
-    the navigation, and React makes this as a normal XHR/fetch request.
+    Azure AD is used for authentication only. Authorization is role-based
+    via our own roles + business_member_roles tables.
+
+    First login: user gets global_admin if no roles in token (local dev),
+    otherwise gets the matching system role(s) from the Azure AD claim.
+
+    Azure AD role claim → system role mapping:
+      Admin      → global_admin
+      Sales      → sales_executive
+      Marketing  → marketing_manager
+      Billing    → billing_manager
+      Operations → ops_manager
     """
+    from app.core.models.business import Business, BusinessMember
+    from app.core.models.role import Role, BusinessMemberRole
+
+    # Azure AD app role → system role name(s)
+    AZURE_ROLE_MAP: dict[str, list[str]] = {
+        "Admin":      ["global_admin"],
+        "Sales":      ["sales_executive"],
+        "Marketing":  ["marketing_manager"],
+        "Billing":    ["billing_manager"],
+        "Operations": ["ops_manager"],
+    }
+
     credential = await _get_client_credential()
     result = _msal_app(credential).acquire_token_by_authorization_code(
         code,
@@ -150,38 +170,132 @@ async def microsoft_exchange(
     claims = result.get("id_token_claims", {})
     email = claims.get("preferred_username") or claims.get("email", "")
     name = claims.get("name") or email
-    user_oid = claims.get("oid", "")
+    azure_roles: list[str] = claims.get("roles", [])
 
     if not email:
         raise HTTPException(status_code=400, detail="No email in Azure AD token claims")
 
-    # Validate group membership via Managed Identity → Microsoft Graph
-    if settings.azure_ad_group_id and user_oid:
-        async_credential = AsyncDefaultAzureCredential()
-        try:
-            token = await async_credential.get_token("https://graph.microsoft.com/.default")
-            async with httpx.AsyncClient() as http:
-                r = await http.post(
-                    f"https://graph.microsoft.com/v1.0/users/{user_oid}/checkMemberGroups",
-                    headers={"Authorization": f"Bearer {token.token}"},
-                    json={"groupIds": [settings.azure_ad_group_id]},
-                )
-            if settings.azure_ad_group_id not in r.json().get("value", []):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Access denied: not a member of the Sapphire Users group",
-                )
-        finally:
-            await async_credential.close()
+    # ── Derive system role names from Azure AD claims ──
+    # No roles in token = local dev or app roles not configured → global_admin
+    system_role_names: list[str] = []
+    is_owner = False
 
+    if azure_roles:
+        seen: set[str] = set()
+        for ar in azure_roles:
+            for sr in AZURE_ROLE_MAP.get(ar, []):
+                if sr not in seen:
+                    system_role_names.append(sr)
+                    seen.add(sr)
+        if not system_role_names:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: your account has no recognised Sapphire roles",
+            )
+        is_owner = "global_admin" in system_role_names
+    else:
+        system_role_names = ["global_admin"]
+        is_owner = True
+
+    # ── Find or create user ──
     existing = await db.execute(select(User).where(User.email == email))
     user = existing.scalar_one_or_none()
     if not user:
         user = User(email=email, password_hash="", full_name=name)
         db.add(user)
         await db.flush()
+    elif not user.full_name and name:
+        user.full_name = name
 
+    # ── Load system roles by name ──
+    roles_result = await db.execute(
+        select(Role).where(Role.name.in_(system_role_names), Role.business_id.is_(None))
+    )
+    role_objs = {r.name: r for r in roles_result.scalars().all()}
+
+    # ── Sync business_members + role assignments for every business ──
+    all_businesses = await db.execute(select(Business))
+    businesses = all_businesses.scalars().all()
+
+    if businesses:
+        existing_result = await db.execute(
+            select(BusinessMember).where(
+                BusinessMember.user_id == user.id,
+                BusinessMember.business_id.in_([b.id for b in businesses]),
+            )
+        )
+        existing_map = {m.business_id: m for m in existing_result.scalars().all()}
+
+        for biz in businesses:
+            member = existing_map.get(biz.id)
+            if not member:
+                member = BusinessMember(
+                    business_id=biz.id,
+                    user_id=user.id,
+                    is_owner=is_owner,
+                )
+                db.add(member)
+                await db.flush()  # get member.id
+            else:
+                member.is_owner = is_owner
+
+            # Sync roles: remove old, add new system roles
+            existing_bmr = await db.execute(
+                select(BusinessMemberRole).where(
+                    BusinessMemberRole.member_id == member.id
+                )
+            )
+            existing_role_ids = {r.role_id for r in existing_bmr.scalars().all()}
+            target_role_ids = {role_objs[n].id for n in system_role_names if n in role_objs}
+
+            for role_id in target_role_ids - existing_role_ids:
+                db.add(BusinessMemberRole(member_id=member.id, role_id=role_id))
+
+    await db.flush()
     return auth_service.create_tokens(user_id=str(user.id))
+
+
+@router.get("/me", response_model=MeResponse)
+async def get_me(
+    db: AsyncSession = Depends(get_db),
+    user_id=Depends(auth_service.get_current_user_id_dep),
+):
+    """Return the current user's profile, roles, and permissions for a given business."""
+    from app.core.models.business import BusinessMember
+    from app.core.models.role import Role, BusinessMemberRole
+    from uuid import UUID
+    from fastapi import Query
+
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    # Get roles + permissions across all businesses this user belongs to
+    roles_result = await db.execute(
+        select(Role.name, Role.permissions)
+        .join(BusinessMemberRole, BusinessMemberRole.role_id == Role.id)
+        .join(BusinessMember, BusinessMember.id == BusinessMemberRole.member_id)
+        .where(BusinessMember.user_id == user_id)
+        .distinct()
+    )
+    role_names: list[str] = []
+    all_permissions: set[str] = set()
+    for name, perms in roles_result.all():
+        role_names.append(name)
+        if "*" in perms:
+            from app.core.models.role import ALL_PERMISSIONS
+            all_permissions = ALL_PERMISSIONS | {"*"}
+        else:
+            all_permissions.update(perms)
+
+    return MeResponse(
+        id=str(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        roles=role_names,
+        permissions=sorted(all_permissions),
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)

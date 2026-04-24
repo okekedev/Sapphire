@@ -83,7 +83,10 @@ class OpenAIService:
 
     def __init__(self) -> None:
         self._token_provider = get_bearer_token_provider(
-            DefaultAzureCredential(managed_identity_client_id=settings.uami_client_id or None),
+            DefaultAzureCredential(
+                managed_identity_client_id=settings.uami_client_id or None,
+                exclude_managed_identity_credential=not settings.is_production,
+            ),
             "https://cognitiveservices.azure.com/.default",
         )
 

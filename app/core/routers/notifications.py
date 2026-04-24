@@ -110,7 +110,7 @@ async def mark_read(
 
     notif.is_read = True
     notif.read_at = datetime.now(timezone.utc)
-    await db.commit()
+    await db.flush()
     return {"message": "Marked as read"}
 
 
@@ -131,6 +131,6 @@ async def mark_all_read(
         .values(is_read=True, read_at=datetime.now(timezone.utc))
     )
     result = await db.execute(stmt)
-    await db.commit()
+    await db.flush()
     count = result.rowcount
     return {"message": f"Marked {count} notifications as read", "count": count}

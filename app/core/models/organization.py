@@ -56,13 +56,6 @@ class Department(Base):
     sms_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false"), default=False,
     )  # Send SMS notification (caller name + reason) to forward_number when calls are routed here
-    whatsapp_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, server_default=text("false"), default=False,
-    )  # Send WhatsApp call summary to forward_number when calls are routed here
-    whatsapp_sender_sid: Mapped[str | None] = mapped_column(String(34))  # XE... SID from Twilio Senders API
-    whatsapp_sender_status: Mapped[str | None] = mapped_column(
-        String(30), server_default=text("'none'"),
-    )  # CREATING, ONLINE, OFFLINE, PENDING_VERIFICATION, VERIFYING, etc.
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")

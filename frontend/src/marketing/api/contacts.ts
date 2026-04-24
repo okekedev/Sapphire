@@ -2,7 +2,13 @@ import client from "./client";
 
 // ── Types ──
 
-export type ContactStatus = "prospect" | "active_customer" | "churned";
+export type ContactStatus =
+  | "new"
+  | "prospect"
+  | "active_customer"
+  | "no_conversion"
+  | "churned"
+  | "other";
 
 export type InteractionType =
   | "call"
@@ -48,6 +54,9 @@ export interface Contact {
   country: string | null;
   birthday: string | null;  // ISO date: "YYYY-MM-DD"
   notes: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+  contact_role: string | null;
   created_at: string;
   updated_at: string;
   interactions?: Interaction[];
@@ -91,6 +100,7 @@ export async function listContacts(
   businessId: string,
   opts?: {
     status?: ContactStatus;
+    organization_id?: string;
     search?: string;
     limit?: number;
     offset?: number;
@@ -100,6 +110,7 @@ export async function listContacts(
     params: {
       business_id: businessId,
       status: opts?.status,
+      organization_id: opts?.organization_id,
       search: opts?.search,
       limit: opts?.limit ?? 100,
       offset: opts?.offset ?? 0,
@@ -128,6 +139,8 @@ export async function createContact(
     source_channel?: string;
     birthday?: string;
     notes?: string;
+    organization_id?: string;
+    contact_role?: string;
   },
 ): Promise<Contact> {
   const res = await client.post("/contacts", payload, {
@@ -136,51 +149,31 @@ export async function createContact(
   return res.data;
 }
 
+
 export async function updateContact(
   contactId: string,
   businessId: string,
   payload: Partial<{
     full_name: string;
     phone: string;
-    phone_verified: boolean;
     email: string;
-    email_verified: boolean;
     status: ContactStatus;
     source_channel: string;
-    notes: string;
-    stripe_customer_id: string;
+    organization_id: string | null;
+    contact_role: string | null;
+    address_line1: string;
     city: string;
     state: string;
     zip_code: string;
     country: string;
+    birthday: string;
+    notes: string;
   }>,
 ): Promise<Contact> {
   const res = await client.patch(`/contacts/${contactId}`, payload, {
     params: { business_id: businessId },
   });
   return res.data;
-}
-
-export async function updateContactStatus(
-  contactId: string,
-  businessId: string,
-  status: ContactStatus,
-): Promise<Contact> {
-  const res = await client.patch(
-    `/contacts/${contactId}/status`,
-    { status },
-    { params: { business_id: businessId } },
-  );
-  return res.data;
-}
-
-export async function deleteContact(
-  contactId: string,
-  businessId: string,
-): Promise<void> {
-  await client.delete(`/contacts/${contactId}`, {
-    params: { business_id: businessId },
-  });
 }
 
 export async function logInteraction(

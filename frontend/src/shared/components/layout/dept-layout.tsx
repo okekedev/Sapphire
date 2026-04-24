@@ -34,6 +34,8 @@ interface DeptLayoutProps {
   defaultSection?: string;
   /** The Foundry agent name for this department's chat panel. */
   agentName?: string; // "admin" | "billing" | "marketing" | "operations" | "sales"
+  /** Display name shown in the chat header. Defaults to capitalize(agentName). */
+  agentLabel?: string;
   businessId: string;
   /**
    * When set, the chat panel opens and sends this message automatically.
@@ -52,6 +54,7 @@ export function DeptLayout({
   sections,
   defaultSection,
   agentName,
+  agentLabel,
   businessId,
   pendingMessage,
   onPendingConsumed,
@@ -140,93 +143,123 @@ export function DeptLayout({
 
   return (
     <div className="flex flex-col gap-0">
-      {/* ── Sub-nav dropdown ── */}
-      <div className="flex items-center gap-2 mb-5">
-        <div ref={menuRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium shadow-sm hover:bg-muted/50 transition-colors"
-          >
-            <span className="[&>svg]:size-[14px] text-muted-foreground">{activeSection?.icon}</span>
-            <span>{activeSection?.label}</span>
-            {activeSection?.badge != null && activeSection.badge !== 0 && (
-              <span className="min-w-[18px] rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-muted-foreground">
-                {activeSection.badge}
-              </span>
-            )}
-            <ChevronDown size={13} className={cn("text-muted-foreground transition-transform duration-150", menuOpen && "rotate-180")} />
-          </button>
+      {/* ── Sub-nav — only shown when there are multiple sections or an agent ── */}
+      {(sections.length > 1 || agentName) && (
+        <div className="flex items-center gap-2 mb-5">
+          {sections.length > 1 && (
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium shadow-sm hover:bg-muted/50 transition-colors"
+              >
+                <span className="[&>svg]:size-[14px] text-muted-foreground">{activeSection?.icon}</span>
+                <span>{activeSection?.label}</span>
+                {activeSection?.badge != null && activeSection.badge !== 0 && (
+                  <span className="min-w-[18px] rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-muted-foreground">
+                    {activeSection.badge}
+                  </span>
+                )}
+                <ChevronDown size={13} className={cn("text-muted-foreground transition-transform duration-150", menuOpen && "rotate-180")} />
+              </button>
 
-          {menuOpen && (
-            <div className="absolute left-0 top-full mt-1.5 z-30 min-w-[200px] rounded-xl border border-border bg-card shadow-lg overflow-hidden">
-              {sections.map((section) => (
-                <button
-                  key={section.id}
-                  type="button"
-                  disabled={section.disabled}
-                  title={section.disabled ? section.disabledReason : undefined}
-                  onClick={() => {
-                    if (!section.disabled) {
-                      setActive(section.id);
-                      setMenuOpen(false);
-                    }
-                  }}
-                  className={cn(
-                    "w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors",
-                    section.disabled
-                      ? "opacity-40 cursor-not-allowed text-muted-foreground"
-                      : active === section.id
-                        ? "bg-primary/8 text-primary font-medium"
-                        : "text-foreground hover:bg-muted",
-                  )}
-                >
-                  <span className="[&>svg]:size-[14px] text-muted-foreground shrink-0">{section.icon}</span>
-                  {section.label}
-                  {section.badge != null && section.badge !== 0 && (
-                    <span className="ml-auto min-w-[18px] rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-muted-foreground">
-                      {section.badge}
-                    </span>
-                  )}
-                </button>
-              ))}
+              {menuOpen && (
+                <div className="absolute left-0 top-full mt-1.5 z-30 min-w-[200px] rounded-xl border border-border bg-card shadow-lg overflow-hidden">
+                  {sections.map((section) => (
+                    <button
+                      key={section.id}
+                      type="button"
+                      disabled={section.disabled}
+                      title={section.disabled ? section.disabledReason : undefined}
+                      onClick={() => {
+                        if (!section.disabled) {
+                          setActive(section.id);
+                          setMenuOpen(false);
+                        }
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-2.5 px-3.5 py-2.5 text-sm transition-colors",
+                        section.disabled
+                          ? "opacity-40 cursor-not-allowed text-muted-foreground"
+                          : active === section.id
+                            ? "bg-primary/8 text-primary font-medium"
+                            : "text-foreground hover:bg-muted",
+                      )}
+                    >
+                      <span className="[&>svg]:size-[14px] text-muted-foreground shrink-0">{section.icon}</span>
+                      {section.label}
+                      {section.badge != null && section.badge !== 0 && (
+                        <span className="ml-auto min-w-[18px] rounded-full bg-muted-foreground/15 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-muted-foreground">
+                          {section.badge}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
+
+          <div className="flex-1" />
+
+          {agentName && (
+            <button
+              type="button"
+              onClick={() => setChatOpen((v) => !v)}
+              className={cn(
+                "hidden md:flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                chatOpen
+                  ? "bg-primary/10 text-primary border border-primary/20"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              )}
+            >
+              <MessageSquare size={14} />
+              Ask AI
+            </button>
+          )}
         </div>
+      )}
 
-        <div className="flex-1" />
-
-        {agentName && (
+      {/* ── Mobile tab bar (< md, only when agent exists) ── */}
+      {agentName && (
+        <div className="flex md:hidden gap-1 mb-4 rounded-lg border border-border bg-muted/30 p-1">
           <button
             type="button"
-            onClick={() => setChatOpen((v) => !v)}
+            onClick={() => setChatOpen(false)}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
-              chatOpen
-                ? "bg-primary/10 text-primary border border-primary/20"
-                : "text-muted-foreground hover:text-foreground hover:bg-muted",
+              "flex-1 rounded-md py-1.5 text-xs font-medium transition-colors",
+              !chatOpen ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
             )}
           >
-            <MessageSquare size={14} />
-            Ask AI
+            Content
           </button>
-        )}
-      </div>
+          <button
+            type="button"
+            onClick={() => setChatOpen(true)}
+            className={cn(
+              "flex-1 rounded-md py-1.5 text-xs font-medium transition-colors",
+              chatOpen ? "bg-card shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {agentLabel ?? (agentName.charAt(0).toUpperCase() + agentName.slice(1))} AI
+          </button>
+        </div>
+      )}
 
       {/* ── Content + Chat ── */}
       <div className="flex gap-5 items-start">
-        {/* Section content */}
-        <div className="flex-1 min-w-0">
+        {/* Section content — hidden on mobile when chat is open */}
+        <div className={cn("flex-1 min-w-0", chatOpen && agentName ? "hidden md:block" : "")}>
           {activeSection?.content}
         </div>
 
-        {/* Chat panel — sticky to viewport top */}
+        {/* Chat panel — sticky on desktop, full-width on mobile */}
         {chatOpen && agentName && (
-          <div className="w-[340px] shrink-0 flex flex-col rounded-xl border border-border bg-card sticky top-6 max-h-[calc(100vh-96px)] overflow-hidden shadow-sm">
+          <div className="w-full md:w-[340px] shrink-0 flex flex-col rounded-xl border border-border bg-card md:sticky md:top-6 max-h-[calc(100vh-180px)] md:max-h-[calc(100vh-96px)] overflow-hidden shadow-sm">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-muted/30 shrink-0">
               <div>
-                <p className="text-xs font-semibold capitalize">{agentName} AI</p>
+                <p className="text-xs font-semibold">{agentLabel ?? (agentName ? agentName.charAt(0).toUpperCase() + agentName.slice(1) : "")} AI</p>
                 <p className="text-[10px] text-muted-foreground">Department assistant</p>
               </div>
               <button

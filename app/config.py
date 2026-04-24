@@ -54,15 +54,13 @@ class Settings(BaseSettings):
 
     # ── Azure AD (user authentication) ──
     # App registration: "Sapphire" in your Azure AD tenant.
-    # Group: "Sapphire Users" — only members can sign in.
-    # Redirect URI to register: http://localhost:8000/api/v1/auth/microsoft/callback
+    # Redirect URI to register: http://localhost:5173/auth/callback
     azure_ad_tenant_id: str = ""
     azure_ad_client_id: str = ""
     azure_ad_client_secret: str = ""  # Local dev fallback — prod uses UAMI federated assertion
-    azure_ad_group_id: str = ""  # Object ID of "Sapphire Users" group; empty = skip group check
-    # Redirect URI = frontend /auth/callback route (SWA serves index.html for it).
-    # React reads ?code=... and calls /api/v1/auth/microsoft/exchange via fetch.
     azure_ad_redirect_uri: str = "http://localhost:5173/auth/callback"
+    # App roles are defined in the Entra app registration — no group IDs needed here.
+    # Roles arrive in the JWT token claims automatically when assigned in Azure AD.
     # UAMI client ID (not a secret — safe as env var / Container App config)
     # uami-sapphire-prod: 5f9b9f3d-fde9-4cc4-bd37-59b23ad59503
     uami_client_id: str = ""
@@ -72,16 +70,6 @@ class Settings(BaseSettings):
     linkedin_client_id: str = ""
     linkedin_client_secret: str = ""
     linkedin_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
-
-    # ── OAuth: Twitter / X ──
-    twitter_client_id: str = ""
-    twitter_client_secret: str = ""
-    twitter_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
-
-    # ── OAuth: TikTok ──
-    tiktok_client_key: str = ""
-    tiktok_client_secret: str = ""
-    tiktok_redirect_uri: str = "http://localhost:8000/api/v1/oauth/callback"
 
     # ── Google AI / Imagen ──
     google_ai_api_key: str = ""
@@ -93,8 +81,6 @@ class Settings(BaseSettings):
     # ── Redis ──
     # Loaded from Key Vault in production; set in .env for local dev.
     redis_url: str = ""
-    celery_broker_url: str = ""
-    celery_result_backend: str = ""
 
     # ── Email Delivery ──
     email_provider: str = "log"  # "sendgrid" | "smtp" | "log" (dev mode — prints to console)
@@ -129,7 +115,9 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     # ── Azure Key Vault ──
-    azure_keyvault_url: str = "https://kv-sapphire-okeke.vault.azure.net"
+    # Set via AZURE_KEYVAULT_URL env var or Container App config.
+    # Empty = skip Key Vault (local dev without vault access).
+    azure_keyvault_url: str = ""
 
     # ── Azure AI Services (OpenAI) ──
     foundry_endpoint: str = "https://ai-sapphire-prod.cognitiveservices.azure.com"
@@ -185,26 +173,26 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
         # LinkedIn
         "linkedin-client-id": "linkedin_client_id",
         "linkedin-client-secret": "linkedin_client_secret",
-        # Twitter / X
-        "twitter-client-id": "twitter_client_id",
-        "twitter-client-secret": "twitter_client_secret",
-        # TikTok
-        "tiktok-client-key": "tiktok_client_key",
-        "tiktok-client-secret": "tiktok_client_secret",
         # Infrastructure
         # acs-connection-string: loaded here for local dev only.
         # In production the Container App MI has Contributor on the ACS resource,
         # so acs_connection_string stays empty and DefaultAzureCredential is used.
         "acs-connection-string": "acs_connection_string",
         "redis-url": "redis_url",
-        "celery-broker-url": "celery_broker_url",
-        "celery-result-backend": "celery_result_backend",
         "applyra-api-key": "applyra_api_key",
     }
-    for secret_name, attr in mappings.items():
-        value = kv.get(secret_name)
-        if value:
-            overrides[attr] = value
+    # Fetch all secrets in parallel to avoid serial HTTPS round-trips (18 × ~2s = 36s)
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    def _fetch(item):
+        secret_name, attr = item
+        return attr, kv.get(secret_name)
+
+    with ThreadPoolExecutor(max_workers=len(mappings)) as pool:
+        futures = {pool.submit(_fetch, item): item for item in mappings.items()}
+        for future in as_completed(futures):
+            attr, value = future.result()
+            if value:
+                overrides[attr] = value
 
     if overrides:
         return s.model_copy(update=overrides)

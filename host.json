@@ -12,5 +12,8 @@
     "http": {
       "routePrefix": ""
     }
+  },
+  "languageWorker": {
+    "workerTimeout": "00:05:00"
   }
 }

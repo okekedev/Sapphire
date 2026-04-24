@@ -16,6 +16,8 @@ import {
   Clock,
   AlertTriangle,
   Hash,
+  Copy,
+  Globe,
 } from "lucide-react";
 import { cn } from "@/shared/lib/utils";
 import { useAppStore } from "@/shared/stores/app-store";
@@ -34,6 +36,17 @@ import {
   releaseNumber,
   type AvailableNumber,
 } from "@/admin/api/acs";
+import { listForms, createForm, deleteForm, embedSnippet, type ContactForm } from "@/admin/api/forms";
+import {
+  listTeamMembers,
+  listRoles,
+  inviteMember,
+  updateMemberRoles,
+  removeMember,
+  type TeamMember,
+  type Role,
+} from "@/admin/api/team";
+import { usePermissions } from "@/shared/hooks/use-permissions";
 
 // ── Voice Options ──
 
@@ -806,7 +819,7 @@ export default function AdminPage() {
   );
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-10 p-4 md:p-6">
       {/* ── Phone Numbers ── */}
       <section>
         <div className="flex items-center gap-3 mb-5">
@@ -825,6 +838,15 @@ export default function AdminPage() {
         {routingContent}
       </section>
 
+      {/* ── Contact Forms ── */}
+      <section>
+        <div className="flex items-center gap-3 mb-5">
+          <p className="text-sm font-semibold">Contact Forms</p>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+        <ContactFormsSection businessId={bizId} />
+      </section>
+
       {/* ── IVR Settings ── */}
       <section className={cn(!mainlineNumber && "pointer-events-none opacity-40")}>
         <div className="flex items-center gap-3 mb-5">
@@ -836,6 +858,144 @@ export default function AdminPage() {
         </div>
         {ivrContent}
       </section>
+
+      {/* ── Team ── */}
+      {bizId && (
+        <section>
+          <div className="flex items-center gap-3 mb-5">
+            <p className="text-sm font-semibold">Team</p>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+          <TeamSection businessId={bizId} />
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ── Contact Forms Section ──
+
+function ContactFormsSection({ businessId }: { businessId: string }) {
+  const qc = useQueryClient();
+  const [newName, setNewName] = useState("");
+  const [newRedirect, setNewRedirect] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const { data: forms = [], isLoading } = useQuery<ContactForm[]>({
+    queryKey: ["contact-forms", businessId],
+    queryFn: () => listForms(businessId),
+    enabled: !!businessId,
+  });
+
+  const createMutation = useMutation({
+    mutationFn: () => createForm(businessId, { name: newName.trim(), redirect_url: newRedirect.trim() || undefined }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["contact-forms", businessId] });
+      setNewName("");
+      setNewRedirect("");
+      setCreating(false);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (formId: string) => deleteForm(formId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["contact-forms", businessId] }),
+  });
+
+  const handleCopy = (formId: string) => {
+    navigator.clipboard.writeText(embedSnippet(formId));
+    setCopied(formId);
+    setTimeout(() => setCopied(null), 2000);
+  };
+
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">
+        Embed contact forms on your website. Each form creates contacts automatically when submitted.
+      </p>
+
+      {isLoading ? (
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      ) : forms.length === 0 ? (
+        <p className="text-xs text-muted-foreground italic">No forms yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {forms.map((form) => (
+            <div key={form.id} className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+              <Globe className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium">{form.name}</p>
+                {form.redirect_url && (
+                  <p className="text-[11px] text-muted-foreground truncate">{form.redirect_url}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => handleCopy(form.id)}
+                className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-muted"
+                title="Copy embed snippet"
+              >
+                <Copy className="h-3 w-3" />
+                {copied === form.id ? "Copied!" : "Embed"}
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(form.id)}
+                disabled={deleteMutation.isPending}
+                className="text-muted-foreground hover:text-destructive transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {creating ? (
+        <form
+          onSubmit={(e) => { e.preventDefault(); if (newName.trim()) createMutation.mutate(); }}
+          className="rounded-lg border border-border bg-card p-4 space-y-3"
+        >
+          <div>
+            <label className="block text-[11px] font-medium text-muted-foreground mb-1">Form name *</label>
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Contact Us"
+              className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm outline-none focus:border-primary transition-colors"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-medium text-muted-foreground mb-1">Redirect URL (optional)</label>
+            <input
+              value={newRedirect}
+              onChange={(e) => setNewRedirect(e.target.value)}
+              placeholder="https://yoursite.com/thank-you"
+              className="w-full rounded-lg border border-border bg-background px-3 py-1.5 text-sm outline-none focus:border-primary transition-colors"
+            />
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button type="button" onClick={() => setCreating(false)} className="text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+            <button
+              type="submit"
+              disabled={!newName.trim() || createMutation.isPending}
+              className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40 hover:bg-primary/90 transition-colors"
+            >
+              {createMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Create Form"}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setCreating(true)}
+          className="flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" /> New Form
+        </button>
+      )}
     </div>
   );
 }
@@ -1221,6 +1381,293 @@ function FlowArrow() {
     <div className="flex flex-col items-center py-1">
       <div className="h-4 w-px bg-border" />
       <div className="h-0 w-0 border-l-[4px] border-r-[4px] border-t-[5px] border-l-transparent border-r-transparent border-t-border" />
+    </div>
+  );
+}
+
+// ── Team Section ──
+
+const ROLE_BADGE_COLORS: Record<string, string> = {
+  global_admin:       "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300",
+  phone_admin:        "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",
+  business_manager:   "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  analyst:            "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  sales_executive:    "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  sales_rep:          "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300",
+  ops_manager:        "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300",
+  ops_tech:           "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  billing_manager:    "bg-teal-100 text-teal-700 dark:bg-teal-900/40 dark:text-teal-300",
+  marketing_manager:  "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",
+  legal:              "bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300",
+};
+
+function RoleBadge({ name }: { name: string }) {
+  return (
+    <span className={cn(
+      "inline-block rounded-full px-2 py-0.5 text-[10px] font-medium",
+      ROLE_BADGE_COLORS[name] ?? "bg-muted text-muted-foreground",
+    )}>
+      {name.replace(/_/g, " ")}
+    </span>
+  );
+}
+
+function TeamSection({ businessId }: { businessId: string }) {
+  const qc = useQueryClient();
+  const { can } = usePermissions();
+  const canManage = can("manage_team");
+
+  const { data: members = [], isLoading } = useQuery<TeamMember[]>({
+    queryKey: ["team-members", businessId],
+    queryFn: () => listTeamMembers(businessId),
+    enabled: !!businessId,
+  });
+
+  const { data: roles = [] } = useQuery<Role[]>({
+    queryKey: ["team-roles", businessId],
+    queryFn: () => listRoles(businessId),
+    enabled: !!businessId && canManage,
+  });
+
+  // Invite form state
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRoles, setInviteRoles] = useState<string[]>([]);
+
+  // Edit roles state
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [editRoles, setEditRoles] = useState<string[]>([]);
+
+  // Confirm remove
+  const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+
+  const inviteMut = useMutation({
+    mutationFn: () => inviteMember(businessId, inviteEmail.trim(), inviteRoles),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team-members", businessId] });
+      setShowInvite(false);
+      setInviteEmail("");
+      setInviteRoles([]);
+    },
+  });
+
+  const updateRolesMut = useMutation({
+    mutationFn: ({ memberId, roleNames }: { memberId: string; roleNames: string[] }) =>
+      updateMemberRoles(businessId, memberId, roleNames),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team-members", businessId] });
+      setEditingMemberId(null);
+    },
+  });
+
+  const removeMut = useMutation({
+    mutationFn: (memberId: string) => removeMember(businessId, memberId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["team-members", businessId] });
+      setConfirmRemoveId(null);
+    },
+  });
+
+  const toggleEditRole = (roleName: string) => {
+    setEditRoles((prev) =>
+      prev.includes(roleName) ? prev.filter((r) => r !== roleName) : [...prev, roleName],
+    );
+  };
+
+  if (isLoading) {
+    return <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>;
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Member list */}
+      <div className="rounded-xl border border-border overflow-hidden">
+        {members.length === 0 ? (
+          <div className="px-4 py-8 text-center text-sm text-muted-foreground">No team members yet.</div>
+        ) : (
+          members.map((member) => (
+            <div key={member.id} className="px-4 py-3 border-b border-border last:border-0">
+              {editingMemberId === member.id ? (
+                /* Role edit mode */
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">{member.full_name || member.email}</p>
+                      <p className="text-[11px] text-muted-foreground">{member.email}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingMemberId(null)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {roles.map((role) => (
+                      <button
+                        key={role.id}
+                        type="button"
+                        onClick={() => toggleEditRole(role.name)}
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
+                          editRoles.includes(role.name)
+                            ? "border-primary bg-primary/10 text-primary"
+                            : "border-border text-muted-foreground hover:border-primary/50",
+                        )}
+                      >
+                        {role.name.replace(/_/g, " ")}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => updateRolesMut.mutate({ memberId: member.id, roleNames: editRoles })}
+                      disabled={updateRolesMut.isPending}
+                      className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      {updateRolesMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <Check size={11} />}
+                      Save roles
+                    </button>
+                  </div>
+                </div>
+              ) : confirmRemoveId === member.id ? (
+                /* Remove confirmation */
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-foreground">Remove <strong>{member.full_name || member.email}</strong>?</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmRemoveId(null)}
+                      className="rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeMut.mutate(member.id)}
+                      disabled={removeMut.isPending}
+                      className="rounded-md bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {removeMut.isPending ? "Removing…" : "Remove"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Normal view */
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium">{member.full_name || member.email}</p>
+                      {member.is_owner && (
+                        <span className="rounded-full bg-muted px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">Owner</span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{member.email}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {member.roles.length === 0
+                        ? <span className="text-[10px] text-muted-foreground italic">No roles assigned</span>
+                        : member.roles.map((r) => <RoleBadge key={r.id} name={r.name} />)
+                      }
+                    </div>
+                  </div>
+                  {canManage && !member.is_owner && (
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingMemberId(member.id);
+                          setEditRoles(member.roles.map((r) => r.name));
+                        }}
+                        className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        title="Edit roles"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveId(member.id)}
+                        className="rounded p-1.5 text-muted-foreground hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-900/20 transition-colors"
+                        title="Remove member"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Invite form */}
+      {canManage && (
+        showInvite ? (
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <p className="text-sm font-medium">Invite team member</p>
+            <input
+              type="email"
+              placeholder="Email address"
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary transition-colors"
+            />
+            <div>
+              <p className="text-[11px] font-medium text-muted-foreground mb-1.5">Assign roles</p>
+              <div className="flex flex-wrap gap-1.5">
+                {roles.map((role) => (
+                  <button
+                    key={role.id}
+                    type="button"
+                    onClick={() =>
+                      setInviteRoles((prev) =>
+                        prev.includes(role.name) ? prev.filter((r) => r !== role.name) : [...prev, role.name],
+                      )
+                    }
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
+                      inviteRoles.includes(role.name)
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/50",
+                    )}
+                  >
+                    {role.name.replace(/_/g, " ")}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => inviteMut.mutate()}
+                disabled={!inviteEmail.trim() || inviteMut.isPending}
+                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                {inviteMut.isPending ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
+                Send invite
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowInvite(false); setInviteEmail(""); setInviteRoles([]); }}
+                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowInvite(true)}
+            className="flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-3 text-sm text-muted-foreground hover:bg-muted/40 hover:border-primary/30 transition-colors group w-full"
+          >
+            <Plus size={15} className="group-hover:text-primary transition-colors" />
+            Invite team member
+          </button>
+        )
+      )}
     </div>
   );
 }

@@ -22,7 +22,7 @@ install: ## Install/update dependencies
 	$(PIP) install -r requirements.txt
 
 server: ## Start the Azure Functions server (port 8000)
-	func start --port 8000
+	PATH=$(CURDIR)/venv/bin:$(PATH) CLAUDECODE=1 func start --port 8000
 
 test: ## Run unit tests (no server needed)
 	$(PY) -m pytest tests/ -v

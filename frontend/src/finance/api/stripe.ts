@@ -43,3 +43,39 @@ export async function disconnectStripe(businessId: string): Promise<{ status: st
   });
   return res.data;
 }
+
+export interface ImportResult {
+  imported: number;
+  updated: number;
+  total: number;
+  needs_org_review: Array<{
+    contact_id: string;
+    name: string;
+    email: string | null;
+    company: string;
+  }>;
+}
+
+export async function importStripeCustomers(businessId: string): Promise<ImportResult> {
+  const res = await client.post("/stripe/import-customers", null, {
+    params: { business_id: businessId },
+  });
+  return res.data;
+}
+
+export interface OrgAssignment {
+  contact_id: string;
+  organization_id?: string;
+  new_org_name?: string;
+}
+
+export async function assignOrganizations(
+  businessId: string,
+  assignments: OrgAssignment[],
+): Promise<{ ok: boolean; assigned: number }> {
+  const res = await client.post("/stripe/assign-orgs", {
+    business_id: businessId,
+    assignments,
+  });
+  return res.data;
+}

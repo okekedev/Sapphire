@@ -39,6 +39,8 @@ class CustomerItem(BaseModel):
     score: Optional[str] = None
     duration_s: Optional[int] = None
     campaign_name: Optional[str] = None
+    assigned_to: Optional[UUID] = None
+    assigned_user_name: Optional[str] = None
 
 
 class CustomerListResponse(BaseModel):
@@ -62,6 +64,7 @@ class UpdateCustomerRequest(BaseModel):
     email: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    assigned_to: Optional[UUID] = None
 
 
 # ── Jobs ──
@@ -75,10 +78,21 @@ class JobItem(BaseModel):
     source: Optional[str] = None  # "sales" when converted from lead
     title: str
     description: Optional[str] = None
-    status: str = "new"  # new | in_progress | completed | billed
+    status: str = "new"  # new | scheduled | dispatched | started | completed | billing
     notes: Optional[str] = None
     amount_quoted: Optional[float] = None
     amount_billed: Optional[float] = None
+    # Template
+    template_id: Optional[UUID] = None
+    template_data: Optional[dict] = None
+    # Assignment + scheduling
+    assigned_to: Optional[UUID] = None
+    assigned_staff_name: Optional[str] = None
+    assigned_staff_color: Optional[str] = None
+    service_address: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
+    dispatched_at: Optional[datetime] = None
+    # Timestamps
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
@@ -100,6 +114,8 @@ class CreateJobRequest(BaseModel):
     description: Optional[str] = None
     notes: Optional[str] = None
     amount_quoted: Optional[float] = None
+    template_id: Optional[UUID] = None
+    service_address: Optional[str] = None
 
 
 class UpdateJobRequest(BaseModel):
@@ -109,6 +125,11 @@ class UpdateJobRequest(BaseModel):
     notes: Optional[str] = None
     amount_quoted: Optional[float] = None
     amount_billed: Optional[float] = None
+    template_id: Optional[UUID] = None
+    template_data: Optional[dict] = None
+    assigned_to: Optional[UUID] = None
+    service_address: Optional[str] = None
+    scheduled_at: Optional[datetime] = None
 
 
 # ── Sales Summary (for dashboard / KPIs) ──

@@ -109,7 +109,8 @@ export default function NarrativePage() {
   );
 
   return (
-    <div className="flex flex-col md:flex-row gap-5 md:h-[calc(100vh-9rem)]">
+    <div className="p-4 md:p-6 md:h-[calc(100vh-3.5rem)] flex flex-col">
+    <div className="flex flex-col md:flex-row gap-5 flex-1 min-h-0">
 
       {/* ── Left: Business Narrative ── */}
       <div className="flex flex-col flex-1 min-h-[320px] rounded-xl border border-border bg-card overflow-hidden">
@@ -213,6 +214,7 @@ export default function NarrativePage() {
         </form>
       </div>
 
+    </div>
     </div>
   );
 }

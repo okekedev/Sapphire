@@ -278,7 +278,7 @@ async def sync_stripe_customers(
             if customers:
                 starting_after = customers[-1]["id"]
 
-        await db.commit()
+        await db.flush()
         return {
             "total_synced": already,
             "message": f"Synced {already} Stripe customers into contacts",

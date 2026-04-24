@@ -1,10 +1,65 @@
-"""Pydantic schemas for the CRM: contacts, interactions."""
+"""Pydantic schemas for the CRM: organizations, contacts, interactions."""
 
 from uuid import UUID
 from typing import Optional
 from datetime import datetime, date
 
 from pydantic import BaseModel, Field, AliasChoices
+
+
+# ─────────────────────────────────────────
+# Organization
+# ─────────────────────────────────────────
+
+class OrganizationCreate(BaseModel):
+    name: str = Field(..., max_length=255)
+    domain: Optional[str] = Field(None, max_length=255)
+    industry: Optional[str] = Field(None, max_length=100)
+    website: Optional[str] = Field(None, max_length=500)
+    notes: Optional[str] = None
+    address_line1: Optional[str] = Field(None, max_length=255)
+    city: Optional[str] = Field(None, max_length=100)
+    state: Optional[str] = Field(None, max_length=100)
+    zip_code: Optional[str] = Field(None, max_length=20)
+    country: Optional[str] = Field(None, max_length=100)
+
+
+class OrganizationUpdate(BaseModel):
+    name: Optional[str] = Field(None, max_length=255)
+    domain: Optional[str] = Field(None, max_length=255)
+    industry: Optional[str] = Field(None, max_length=100)
+    website: Optional[str] = Field(None, max_length=500)
+    notes: Optional[str] = None
+    address_line1: Optional[str] = Field(None, max_length=255)
+    city: Optional[str] = Field(None, max_length=100)
+    state: Optional[str] = Field(None, max_length=100)
+    zip_code: Optional[str] = Field(None, max_length=20)
+    country: Optional[str] = Field(None, max_length=100)
+
+
+class OrganizationOut(BaseModel):
+    id: UUID
+    business_id: UUID
+    name: str
+    domain: Optional[str] = None
+    industry: Optional[str] = None
+    website: Optional[str] = None
+    notes: Optional[str] = None
+    address_line1: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    country: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    contact_count: int = 0
+
+    model_config = {"from_attributes": True}
+
+
+class OrganizationListResponse(BaseModel):
+    organizations: list[OrganizationOut]
+    total: int
 
 
 # ─────────────────────────────────────────
@@ -75,6 +130,8 @@ class ContactCreate(BaseModel):
     country: Optional[str] = Field(None, max_length=100)
     birthday: Optional[date] = None
     notes: Optional[str] = None
+    organization_id: Optional[UUID] = None
+    contact_role: Optional[str] = Field(None, max_length=100)
 
 
 class ContactUpdate(BaseModel):
@@ -101,6 +158,8 @@ class ContactUpdate(BaseModel):
     country: Optional[str] = Field(None, max_length=100)
     birthday: Optional[date] = None
     notes: Optional[str] = None
+    organization_id: Optional[UUID] = None
+    contact_role: Optional[str] = Field(None, max_length=100)
 
 
 class ContactStatusUpdate(BaseModel):
@@ -133,6 +192,9 @@ class ContactOut(BaseModel):
     country: Optional[str] = None
     birthday: Optional[date] = None
     notes: Optional[str] = None
+    organization_id: Optional[UUID] = None
+    organization_name: Optional[str] = None
+    contact_role: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

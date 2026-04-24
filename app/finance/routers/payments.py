@@ -103,7 +103,7 @@ async def create_payment(
         source=payload.source,
     )
     db.add(payment)
-    await db.commit()
+    await db.flush()
     await db.refresh(payment)
     return payment
 
@@ -132,7 +132,7 @@ async def update_payment(
     update_data = payload.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(payment, field, value)
-    await db.commit()
+    await db.flush()
     await db.refresh(payment)
     return payment
 
@@ -147,4 +147,4 @@ async def delete_payment(
     """Delete a payment."""
     payment = await _get_payment_or_404(payment_id, business_id, db)
     await db.delete(payment)
-    await db.commit()
+    await db.flush()

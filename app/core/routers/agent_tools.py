@@ -40,7 +40,9 @@ class SelfUpdateRequest(BaseModel):
 
 def _get_openai_client() -> AzureOpenAI:
     token_provider = get_bearer_token_provider(
-        DefaultAzureCredential(),
+        DefaultAzureCredential(
+            exclude_managed_identity_credential=not settings.is_production,
+        ),
         "https://cognitiveservices.azure.com/.default",
     )
     return AzureOpenAI(
@@ -187,7 +189,7 @@ async def agent_data(payload: AgentDataRequest, db: AsyncSession = Depends(get_d
             for field, value in payload.data.items():
                 if field in PROFILE_FIELDS:
                     setattr(biz, field, value)
-            await db.commit()
+            await db.flush()
             return {"updated": list(payload.data.keys())}
 
     # ── Contacts ──
@@ -240,7 +242,7 @@ async def agent_data(payload: AgentDataRequest, db: AsyncSession = Depends(get_d
                 status="new",
             )
             db.add(c)
-            await db.commit()
+            await db.flush()
             await db.refresh(c)
             return {"id": str(c.id), "name": c.full_name, "status": c.status}
 
@@ -252,7 +254,7 @@ async def agent_data(payload: AgentDataRequest, db: AsyncSession = Depends(get_d
             for field, value in payload.data.items():
                 if hasattr(c, field):
                     setattr(c, field, value)
-            await db.commit()
+            await db.flush()
             return {"updated": str(c.id)}
 
     # ── Jobs ──

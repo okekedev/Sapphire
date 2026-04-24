@@ -1,30 +1,24 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Loader2, AlertCircle, Building2 } from "lucide-react";
 
-import { useAppStore } from "@/shared/stores/app-store";
 import { getMicrosoftLoginUrl } from "@/shared/api/auth";
 
 import { AuthLayout } from "@/shared/components/auth/auth-layout";
 import { Button } from "@/shared/components/ui/button";
 
 export default function LoginPage() {
-  const navigate = useNavigate();
   const [apiError, setApiError] = useState("");
-  const [isMsLoading, setIsMsLoading] = useState(false);
-
-  // suppress unused warning — navigate kept for future post-login redirect use
-  void navigate;
+  const [isLoading, setIsLoading] = useState(false);
 
   const onMicrosoftLogin = async () => {
     setApiError("");
-    setIsMsLoading(true);
+    setIsLoading(true);
     try {
       const authUrl = await getMicrosoftLoginUrl();
       window.location.href = authUrl;
     } catch {
       setApiError("Could not reach authentication server");
-      setIsMsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -41,7 +35,7 @@ export default function LoginPage() {
       {/* Header */}
       <div className="text-center">
         <h1 className="text-2xl font-bold sm:text-3xl">Welcome back</h1>
-        <p className="mt-2 text-muted-foreground">Sign in to continue</p>
+        <p className="mt-2 text-muted-foreground">Sign in with your Microsoft work account</p>
       </div>
 
       {/* Error banner */}
@@ -52,15 +46,14 @@ export default function LoginPage() {
         </div>
       )}
 
-      {/* Microsoft SSO — only sign-in method */}
       <Button
         type="button"
         variant="outline"
         className="w-full gap-2"
         onClick={onMicrosoftLogin}
-        disabled={isMsLoading}
+        disabled={isLoading}
       >
-        {isMsLoading ? (
+        {isLoading ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
           <svg viewBox="0 0 21 21" className="h-4 w-4" fill="none">

@@ -1,11 +1,9 @@
-"""CRM models: Contact, Interaction.
+"""CRM models: Organization, Contact, Interaction.
 
-Contacts is the single source of truth for prospects and customers.
-customer_type is set per-interaction context: "new" on first call, "returning"
-on subsequent calls. The Contact-level customer_type reflects the latest state.
-
-Interactions log every touchpoint: calls, emails, form submits, SMS, payments.
-Phone number ownership is stored in the phone_lines table (phone_number, line_type, label).
+Organization: optional B2B account layer — groups multiple contacts under one company.
+Contact: single source of truth for prospects and customers. organization_id FK is nullable
+  (B2C contacts have no org).
+Interaction: every touchpoint — calls, emails, form submits, SMS, payments, notes.
 """
 
 import uuid
@@ -17,6 +15,52 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
+
+
+class Organization(Base):
+    """A B2B account — groups multiple contacts under one parent company.
+
+    Optional: B2C contacts (e.g. homeowners) have organization_id=NULL.
+    B2B contacts (e.g. property managers) link to an Organization row.
+    """
+    __tablename__ = "organizations"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("businesses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    domain: Mapped[Optional[str]] = mapped_column(String(255))
+    industry: Mapped[Optional[str]] = mapped_column(String(100))
+    website: Mapped[Optional[str]] = mapped_column(String(500))
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+
+    # ── Address ──
+    address_line1: Mapped[Optional[str]] = mapped_column(String(255))
+    city: Mapped[Optional[str]] = mapped_column(String(100))
+    state: Mapped[Optional[str]] = mapped_column(String(100))
+    zip_code: Mapped[Optional[str]] = mapped_column(String(20))
+    country: Mapped[Optional[str]] = mapped_column(String(100))
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=text("now()"),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    business = relationship("Business", foreign_keys=[business_id])
+    contacts = relationship("Contact", back_populates="organization")
 
 
 class Contact(Base):
@@ -115,6 +159,24 @@ class Contact(Base):
     # ── Notes ──
     notes: Mapped[Optional[str]] = mapped_column(Text)
 
+    # ── Organization (B2B account layer — nullable for B2C contacts) ──
+    organization_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # Role this contact plays at their organization (e.g. "CEO", "Property Manager")
+    contact_role: Mapped[Optional[str]] = mapped_column(String(100))
+
+    # ── Sales assignment (which sales rep owns this contact) ──
+    assigned_to: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # ── Timestamps ──
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"),
@@ -127,6 +189,7 @@ class Contact(Base):
 
     # ── Relationships ──
     business = relationship("Business", foreign_keys=[business_id])
+    organization = relationship("Organization", back_populates="contacts")
     interactions = relationship(
         "Interaction",
         back_populates="contact",
@@ -246,10 +309,10 @@ class ContentPost(Base):
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     platform_targets: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default="[]",
+        JSONB, nullable=False, default=list,
     )
     media_ids: Mapped[list] = mapped_column(
-        JSONB, nullable=False, server_default="[]",
+        JSONB, nullable=False, default=list,
     )
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default="draft", index=True,
@@ -271,3 +334,32 @@ class ContentPost(Base):
         server_default=text("now()"),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class ContactForm(Base):
+    """Embeddable lead capture form — public submissions create Contact rows.
+
+    Required fields (fixed): first_name, last_name, phone, email, reason.
+    redirect_url: where to send the visitor after a successful submission.
+    """
+    __tablename__ = "contact_forms"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("gen_random_uuid()"),
+    )
+    business_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("businesses.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    redirect_url: Mapped[Optional[str]] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=text("now()"),
+    )
+
+    business = relationship("Business", foreign_keys=[business_id])

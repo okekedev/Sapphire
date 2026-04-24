@@ -1,5 +1,5 @@
 import client from "./client";
-import type { LoginRequest, RegisterRequest, TokenResponse } from "@/shared/types/auth";
+import type { LoginRequest, RegisterRequest, TokenResponse, MeResponse } from "@/shared/types/auth";
 
 export async function login(data: LoginRequest): Promise<TokenResponse> {
   const res = await client.post<TokenResponse>("/auth/login", data);
@@ -22,3 +22,9 @@ export async function getMicrosoftLoginUrl(): Promise<string> {
   const res = await client.get<{ auth_url: string }>("/auth/microsoft/login");
   return res.data.auth_url;
 }
+
+export async function getMe(): Promise<MeResponse> {
+  const res = await client.get<MeResponse>("/auth/me");
+  return res.data;
+}
+

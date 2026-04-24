@@ -279,6 +279,51 @@ class OAuthService:
         await db.flush()
         return account
 
+    async def store_api_key(
+        self,
+        db: AsyncSession,
+        business_id: UUID,
+        platform: str,
+        api_key: str,
+        department_id: UUID | None = None,
+    ) -> ConnectedAccount:
+        """Encrypt an API key and upsert a ConnectedAccount row.
+
+        Args:
+            db: Database session
+            business_id: Business ID
+            platform: Platform name (e.g. "ahrefs", "semrush")
+            api_key: Plain-text API key to encrypt and store
+            department_id: Optional department ID (NULL = shared/business-wide)
+        """
+        cred_json = json.dumps({"api_key": api_key})
+        encrypted = self.encryption.encrypt(cred_json)
+
+        stmt = select(ConnectedAccount).where(
+            ConnectedAccount.business_id == business_id,
+            ConnectedAccount.platform == platform,
+            ConnectedAccount.department_id == department_id,
+        )
+        result = await db.execute(stmt)
+        account = result.scalar_one_or_none()
+
+        if account:
+            account.encrypted_credentials = encrypted
+            account.status = "active"
+        else:
+            account = ConnectedAccount(
+                business_id=business_id,
+                platform=platform,
+                department_id=department_id,
+                auth_method="api_key",
+                encrypted_credentials=encrypted,
+                status="active",
+            )
+            db.add(account)
+
+        await db.flush()
+        return account
+
     # ------------------------------------------------------------------
     # 5. Retrieve decrypted credentials
     # ------------------------------------------------------------------

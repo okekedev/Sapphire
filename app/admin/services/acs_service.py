@@ -176,7 +176,7 @@ class ACSService:
             label=campaign_name or line_type,
         )
         db.add(line)
-        await db.commit()
+        await db.flush()
 
         logger.info(f"[ACS] Provisioned {provisioned_number} ({line_type}) for business {business_id}")
         return {
@@ -204,7 +204,7 @@ class ACSService:
                 PhoneLine.phone_number == phone_number,
             )
         )
-        await db.commit()
+        await db.flush()
         return True
 
     async def list_numbers(self, db: AsyncSession, business_id: UUID) -> list[dict]:
@@ -257,7 +257,7 @@ class ACSService:
             })
 
         if needs_commit:
-            await db.commit()
+            await db.flush()
 
         return result
 

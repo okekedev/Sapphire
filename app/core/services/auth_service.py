@@ -73,3 +73,7 @@ async def get_current_user_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token payload",
         )
+
+
+# Attach as method so auth_service instance can expose it as a dependency
+AuthService.get_current_user_id_dep = staticmethod(get_current_user_id)

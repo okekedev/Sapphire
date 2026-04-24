@@ -12,6 +12,7 @@ When an employee needs a platform, the system checks if the business
 has an active connection for that platform.
 """
 
+import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -36,8 +37,10 @@ from app.core.services.oauth_service import OAuthService
 router = APIRouter()
 
 # In-memory PKCE verifier store (short-lived, keyed by state).
-# Production upgrade: move to Redis with TTL.
-_pkce_store: dict[str, str] = {}
+# Each entry: (code_verifier, expires_at). Entries expire after 10 minutes.
+# Production upgrade: move to Redis with TTL for multi-instance deployments.
+_PKCE_TTL = 600  # seconds
+_pkce_store: dict[str, tuple[str, float]] = {}
 
 
 # ── OAuth Flow ──
@@ -66,7 +69,12 @@ async def initiate_oauth(
         raise HTTPException(status_code=400, detail=str(e))
 
     if code_verifier:
-        _pkce_store[state] = code_verifier
+        # Purge expired entries on each write to prevent unbounded growth
+        now = time.monotonic()
+        expired = [k for k, (_, exp) in _pkce_store.items() if exp <= now]
+        for k in expired:
+            del _pkce_store[k]
+        _pkce_store[state] = (code_verifier, now + _PKCE_TTL)
 
     return Envelope(data=OAuthInitResponse(auth_url=auth_url, state=state))
 
@@ -93,7 +101,8 @@ async def oauth_callback(
     platform = state_data["platform"]
     department_id = UUID(state_data["department_id"]) if state_data.get("department_id") else None
 
-    code_verifier = _pkce_store.pop(state, None)
+    entry = _pkce_store.pop(state, None)
+    code_verifier = entry[0] if entry and entry[1] > time.monotonic() else None
 
     try:
         tokens = await oauth.exchange_code(platform, code, code_verifier)
@@ -108,7 +117,7 @@ async def oauth_callback(
         await oauth.store_credentials(
             db, business_id, platform, tokens, scopes, department_id,
         )
-        await db.commit()
+        await db.flush()
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to store credentials: {e}")

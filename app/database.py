@@ -35,7 +35,13 @@ def _build_connect_args() -> dict:
         # so the token is always fresh. azure-identity handles caching.
         from azure.identity.aio import DefaultAzureCredential  # type: ignore
 
-        _cred = DefaultAzureCredential()
+        # exclude_managed_identity_credential: ManagedIdentityCredential probes
+        # the Azure IMDS endpoint (169.254.169.254) at construction time, causing
+        # a ~50s hang on local machines. Skip it in non-production; AzureCliCredential
+        # (via az login) handles local dev. Production (Container App) sets APP_ENV=production.
+        _cred = DefaultAzureCredential(
+            exclude_managed_identity_credential=not settings.is_production,
+        )
 
         async def _get_token() -> str:
             token = await _cred.get_token(
@@ -43,16 +49,13 @@ def _build_connect_args() -> dict:
             )
             return token.token
 
+        # Azure PostgreSQL Flexible Server uses DigiCert-signed certs which are
+        # in all standard CA stores — no need to disable verification.
         ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
         return {"ssl": ssl_ctx, "password": _get_token}
 
     if any(h in url for h in ("supabase.com", "neon.tech", "railway.app")):
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-        return {"ssl": ssl_ctx}
+        return {"ssl": ssl.create_default_context()}
 
     return {}
 
@@ -72,8 +75,9 @@ async_session = async_sessionmaker(
     expire_on_commit=False,
 )
 
-# Alias for background tasks — use as: async with async_session_factory() as db:
+# Aliases
 async_session_factory = async_session
+AsyncSessionLocal = async_session  # semantic alias for seeding / background tasks
 
 
 class Base(DeclarativeBase):

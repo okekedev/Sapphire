@@ -16,9 +16,6 @@ class DepartmentRoutingRule(BaseModel):
     forward_number: Optional[str] = Field(None, description="Personal phone to forward calls to (E.164)")
     enabled: bool = True
     sms_enabled: bool = False
-    whatsapp_enabled: bool = False
-    whatsapp_sender_sid: Optional[str] = None
-    whatsapp_sender_status: str = "none"
 
 
 class PhoneSettingsRead(BaseModel):

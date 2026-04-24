@@ -231,7 +231,7 @@ async def provision_number(
             status_code=500,
             detail="Failed to provision number. Check ACS endpoint configuration.",
         )
-    await db.commit()
+    await db.flush()
     return result
 
 
@@ -246,7 +246,7 @@ async def release_number(
     ok = await acs_service.release_number(db, business_id, phone_number)
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to release number.")
-    await db.commit()
+    await db.flush()
     return {"status": "released", "phone_number": phone_number}
 
 
@@ -304,7 +304,7 @@ async def update_phone_settings(
             value = time(int(h), int(m))
         setattr(ps, field, value)
 
-    await db.commit()
+    await db.flush()
     return {"status": "updated"}
 
 
@@ -330,7 +330,7 @@ async def update_department_routing(
     for field, value in payload.model_dump(exclude_none=True).items():
         setattr(dept, field, value)
 
-    await db.commit()
+    await db.flush()
     return {"status": "updated"}
 
 
@@ -461,7 +461,7 @@ async def acs_incoming_call(
             called_phone=called_phone.replace("+", "%2B"),
         )
 
-        await db.commit()
+        await db.flush()
 
         # Answer the call — ACS fires CallConnected to callback_url
         conn_id = await acs_service.answer_call(
@@ -636,7 +636,7 @@ async def acs_incoming_sms(
             },
         )
         db.add(sms_interaction)
-        await db.commit()
+        await db.flush()
 
     return {"status": "ok"}
 
@@ -717,7 +717,7 @@ async def outbound_call(
 
     # TODO: use ACS CallAutomationClient.create_call() for outbound PSTN
     # For now, return 501 until outbound calling is wired up
-    await db.commit()
+    await db.flush()
     return {
         "status": "initiated",
         "interaction_id": str(interaction.id),
@@ -751,7 +751,7 @@ async def _on_call_connected(
             meta = dict(interaction.metadata_)
             meta["acs_connection_id"] = call_connection_id
             interaction.metadata_ = meta
-            await db.commit()
+            await db.flush()
 
     # Start recording (non-blocking)
     if mode in ("ivr", "direct_forward", "after_hours_fwd"):
@@ -970,7 +970,7 @@ async def _on_recognize_completed(
             acs_service.send_sms(to=forward_to, from_number=called_phone, body=sms_body)
         )
 
-    await db.commit()
+    await db.flush()
 
     if not forward_to:
         logger.warning(f"[ACS IVR] No forward number for business {business_id} — hanging up")
@@ -1019,7 +1019,7 @@ async def _on_recognize_failed(
                 normalized = normalize_phone(ps.default_forward_number) or ps.default_forward_number
                 meta["forward_to"] = normalized
                 interaction.metadata_ = meta
-                await db.commit()
+                await db.flush()
         await acs_service.transfer_call(
             call_connection_id, normalize_phone(ps.default_forward_number) or ps.default_forward_number, operation_context="fallback_transfer"
         )
@@ -1052,7 +1052,7 @@ async def _on_transfer_accepted(
         meta["transfer_status"] = "accepted"
         meta["transfer_context"] = operation_context
         interaction.metadata_ = meta
-        await db.commit()
+        await db.flush()
 
 
 async def _on_call_disconnected(
@@ -1074,7 +1074,7 @@ async def _on_call_disconnected(
         meta = dict(interaction.metadata_)
         meta["status"] = "completed"
         interaction.metadata_ = meta
-        await db.commit()
+        await db.flush()
 
     # Fire post-call pipeline in background (summary + lead qualification)
     asyncio.create_task(
@@ -1099,7 +1099,7 @@ async def _store_recording_url(
         meta = dict(interaction.metadata_)
         meta["recording_url"] = recording_url
         interaction.metadata_ = meta
-        await db.commit()
+        await db.flush()
 
 
 # ── Post-Call Pipeline (background task) ──
@@ -1224,7 +1224,7 @@ NEXT_STEP: [action]"""
                 if follow_up_draft:
                     meta["follow_up_draft"] = follow_up_draft
                 interaction.metadata_ = meta
-                await db.commit()
+                await db.flush()
 
             logger.info(f"[ACS pipeline] Complete for interaction {interaction_id}")
 

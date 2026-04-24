@@ -455,7 +455,7 @@ async def reseed_from_files(
         except Exception as e:
             errors.append(f"{emp.file_stem}: {e}")
 
-    await db.commit()
+    await db.flush()
 
     logger.info(
         f"Reseed complete: {len(updated)} updated, "

@@ -22,6 +22,8 @@ import {
   Plug,
   Unplug,
   FileText,
+  Download,
+  Building2,
 } from "lucide-react";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { Button } from "@/shared/components/ui/button";
@@ -33,8 +35,13 @@ import {
   getStripeStatus,
   connectStripe,
   disconnectStripe,
+  importStripeCustomers,
+  assignOrganizations,
   type StripeStatus,
+  type ImportResult,
+  type OrgAssignment,
 } from "@/finance/api/stripe";
+import { listOrganizations } from "@/marketing/api/organizations";
 import {
   getRevenueSummary,
   listStripeInvoices,
@@ -119,10 +126,12 @@ function StripeConnectionBanner({
   status,
   onConnect,
   onDisconnect,
+  onImport,
 }: {
   status: StripeStatus | undefined;
   onConnect: () => void;
   onDisconnect: () => void;
+  onImport: () => void;
 }) {
   if (!status) return null;
 
@@ -137,6 +146,9 @@ function StripeConnectionBanner({
           <p className="text-xs text-green-600/70 dark:text-green-500/70">{status.account_name || status.account_id}</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onImport}>
+            <Download className="h-3 w-3 mr-1" /> Import Customers
+          </Button>
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={onConnect}>
             <RefreshCw className="h-3 w-3 mr-1" /> Reconnect
           </Button>
@@ -490,6 +502,41 @@ export default function BillingPage() {
 
   const stripeConnected = stripeStatus?.connected ?? false;
 
+  // Stripe import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [orgAssignments, setOrgAssignments] = useState<Record<string, string>>({}); // contact_id → org_id or "new:Name"
+
+  const { data: existingOrgs } = useQuery({
+    queryKey: ["organizations", businessId],
+    queryFn: () => listOrganizations(businessId),
+    enabled: !!businessId && showImportModal,
+  });
+
+  const importMutation = useMutation({
+    mutationFn: () => importStripeCustomers(businessId),
+    onSuccess: (result) => setImportResult(result),
+  });
+
+  const assignOrgsMutation = useMutation({
+    mutationFn: () => {
+      const assignments: OrgAssignment[] = Object.entries(orgAssignments).map(([contactId, value]) => {
+        if (value.startsWith("new:")) {
+          return { contact_id: contactId, new_org_name: value.slice(4) };
+        }
+        return { contact_id: contactId, organization_id: value };
+      });
+      return assignOrganizations(businessId, assignments);
+    },
+    onSuccess: () => {
+      setShowImportModal(false);
+      setImportResult(null);
+      setOrgAssignments({});
+      queryClient.invalidateQueries({ queryKey: ["contacts", businessId] });
+      queryClient.invalidateQueries({ queryKey: ["organizations", businessId] });
+    },
+  });
+
   // Find Billing department + head employee (Quinn)
   // Jobs in billing status
   const { data: tasksData } = useQuery({
@@ -603,6 +650,7 @@ export default function BillingPage() {
           status={stripeStatus}
           onConnect={() => { setStripeError(null); setShowStripeModal(true); }}
           onDisconnect={() => stripeDisconnectMutation.mutate()}
+          onImport={() => { setImportResult(null); setOrgAssignments({}); setShowImportModal(true); }}
         />
       </div>
 
@@ -622,6 +670,102 @@ export default function BillingPage() {
       )}
 
       {/* Stripe Connect Modal */}
+      {/* ── Stripe Import Modal ── */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="relative w-full max-w-lg rounded-xl bg-background shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4">
+              <h2 className="text-sm font-semibold">Import Stripe Customers</h2>
+              <button onClick={() => setShowImportModal(false)} className="text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {!importResult ? (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    This will import all Stripe customers as Contacts. Existing contacts matched by email or Stripe ID won't be duplicated.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowImportModal(false)}>Cancel</Button>
+                    <Button
+                      size="sm"
+                      onClick={() => importMutation.mutate()}
+                      disabled={importMutation.isPending}
+                    >
+                      {importMutation.isPending
+                        ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Importing…</>
+                        : <><Download className="h-3.5 w-3.5 mr-1.5" /> Start Import</>}
+                    </Button>
+                  </div>
+                  {importMutation.isError && (
+                    <p className="text-xs text-red-600">Import failed. Check Stripe connection.</p>
+                  )}
+                </>
+              ) : importResult.needs_org_review.length === 0 ? (
+                <>
+                  <div className="flex items-center gap-3 rounded-lg bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 p-4">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                    <div>
+                      <p className="text-sm font-medium text-green-700 dark:text-green-400">
+                        {importResult.total} customer{importResult.total !== 1 ? "s" : ""} imported
+                      </p>
+                      <p className="text-xs text-green-600/70">All contacts are ready in your CRM.</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={() => setShowImportModal(false)}>Done</Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="rounded-lg bg-muted/40 border border-border p-3">
+                    <p className="text-sm font-medium">{importResult.total} customers imported</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {importResult.needs_org_review.length} have a company name — assign or create organizations below.
+                    </p>
+                  </div>
+                  <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {importResult.needs_org_review.map((item) => (
+                      <div key={item.contact_id} className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+                        <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{item.name || item.email}</p>
+                          <p className="text-xs text-muted-foreground truncate">{item.company}</p>
+                        </div>
+                        <select
+                          value={orgAssignments[item.contact_id] ?? ""}
+                          onChange={(e) => setOrgAssignments((prev) => ({ ...prev, [item.contact_id]: e.target.value }))}
+                          className="h-7 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+                        >
+                          <option value="">Skip</option>
+                          <option value={`new:${item.company}`}>+ Create "{item.company}"</option>
+                          {(existingOrgs?.organizations ?? []).map((org) => (
+                            <option key={org.id} value={org.id}>{org.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowImportModal(false)}>Skip All</Button>
+                    <Button
+                      size="sm"
+                      onClick={() => assignOrgsMutation.mutate()}
+                      disabled={assignOrgsMutation.isPending || Object.keys(orgAssignments).length === 0}
+                    >
+                      {assignOrgsMutation.isPending
+                        ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> Saving…</>
+                        : "Save Assignments"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showStripeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="relative w-full max-w-md rounded-xl bg-background p-6 shadow-xl">

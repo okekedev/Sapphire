@@ -20,3 +20,11 @@ export interface User {
   email: string;
   full_name: string;
 }
+
+export interface MeResponse {
+  id: string;
+  email: string;
+  full_name: string | null;
+  roles: string[];
+  permissions: string[];
+}
