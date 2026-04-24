@@ -28,6 +28,9 @@ class StaffOut(BaseModel):
     role: str
     color: Optional[str]
     is_active: bool
+    home_address: Optional[str] = None
+    home_lat: Optional[float] = None
+    home_lng: Optional[float] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -41,6 +44,9 @@ class StaffCreate(BaseModel):
     email: Optional[str] = None
     role: str = "technician"
     color: Optional[str] = "#6366f1"
+    home_address: Optional[str] = None
+    home_lat: Optional[float] = None
+    home_lng: Optional[float] = None
 
 
 class StaffUpdate(BaseModel):
@@ -51,6 +57,9 @@ class StaffUpdate(BaseModel):
     role: Optional[str] = None
     color: Optional[str] = None
     is_active: Optional[bool] = None
+    home_address: Optional[str] = None
+    home_lat: Optional[float] = None
+    home_lng: Optional[float] = None
 
 
 # ── Endpoints ──

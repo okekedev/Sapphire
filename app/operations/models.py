@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import String, DateTime, ForeignKey, Text, Numeric, Boolean, text
+from sqlalchemy import String, DateTime, ForeignKey, Text, Numeric, Boolean, Float, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +57,11 @@ class Staff(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("true"), default=True,
     )
+
+    # ── Home / base address (for route planning origin) ──
+    home_address: Mapped[Optional[str]] = mapped_column(Text)
+    home_lat: Mapped[Optional[float]] = mapped_column(Float)
+    home_lng: Mapped[Optional[float]] = mapped_column(Float)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()"),

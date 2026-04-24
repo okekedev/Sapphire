@@ -48,6 +48,7 @@ import { StaffPanel } from "@/operations/components/staff-panel";
 import { TemplateBuilder } from "@/operations/components/template-builder";
 import { JobDispatchSheet } from "@/operations/components/job-dispatch-sheet";
 import { TemplateFillSheet } from "@/operations/components/template-fill-sheet";
+import { DispatchMap } from "@/operations/components/dispatch-map";
 
 // ── Helpers ──
 
@@ -852,7 +853,7 @@ export default function OperationsPage() {
     },
     {
       id: "team",
-      label: "Team",
+      label: "Job Team",
       icon: <Users />,
       content: <StaffPanel businessId={businessId} />,
     },
@@ -877,6 +878,9 @@ export default function OperationsPage() {
         pendingMessage={pendingChatMessage}
         onPendingConsumed={() => setPendingChatMessage(null)}
       />
+
+      {/* Route Planner — separate section below the main tabs */}
+      <DispatchMap businessId={businessId} jobs={allJobs} />
 
       {/* Dispatch sheet */}
       {dispatchJob && (

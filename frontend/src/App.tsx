@@ -62,7 +62,6 @@ export default function App() {
             <Route path="/organizations/:orgId" element={<OrganizationDetailPage />} />
             <Route path="/jobs" element={<OperationsPage />} />
             <Route path="/billing" element={<BillingPage />} />
-            <Route path="/finance" element={<BillingPage />} />
             <Route path="/connections" element={<ConnectionsPage />} />
           </Route>
 

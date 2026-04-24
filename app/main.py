@@ -26,7 +26,7 @@ from app.config import settings
 # ── Core routers ──
 from app.core.routers import (
     auth, businesses, chat, health,
-    notifications, organization, platforms, agent_tools, dashboard,
+    notifications, organization, platforms, agent_tools, dashboard, maps,
 )
 # ── Department routers ──
 from app.marketing.routers import contacts, tracking_routing, email, content, organizations, forms
@@ -102,6 +102,11 @@ async def lifespan(app: FastAPI):
         await conn.execute(sa_text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS zip_code VARCHAR(20)"))
         await conn.execute(sa_text("ALTER TABLE organizations ADD COLUMN IF NOT EXISTS country VARCHAR(100)"))
         _logger.info("✅ organizations: address columns ensured")
+        # staff: home address + geocoded coordinates for route planning
+        await conn.execute(sa_text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS home_address TEXT"))
+        await conn.execute(sa_text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS home_lat FLOAT"))
+        await conn.execute(sa_text("ALTER TABLE staff ADD COLUMN IF NOT EXISTS home_lng FLOAT"))
+        _logger.info("✅ staff: home_address/lat/lng ensured")
 
     # 2. Seed system roles (idempotent — raw SQL; CTE avoids asyncpg ambiguous-param errors)
     import json as _json
@@ -171,6 +176,7 @@ app.include_router(chat.router, prefix=settings.api_prefix)
 app.include_router(notifications.router, prefix=settings.api_prefix)
 app.include_router(organization.router, prefix=settings.api_prefix)
 app.include_router(dashboard.router, prefix=settings.api_prefix)
+app.include_router(maps.router, prefix=settings.api_prefix)
 # ── Marketing / CRM ──
 app.include_router(contacts.router, prefix=settings.api_prefix)
 app.include_router(organizations.router, prefix=settings.api_prefix)

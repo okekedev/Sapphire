@@ -129,6 +129,10 @@ class Settings(BaseSettings):
     acs_endpoint: str = ""
     acs_connection_string: str = ""
 
+    # ── Azure Maps ──
+    # Resource: maps-sapphire-prod (in rg-sapphire-prod)
+    azure_maps_key: str = ""
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
@@ -180,6 +184,7 @@ def _load_from_keyvault(s: "Settings") -> "Settings":
         "acs-connection-string": "acs_connection_string",
         "redis-url": "redis_url",
         "applyra-api-key": "applyra_api_key",
+        "azure-maps-key": "azure_maps_key",
     }
     # Fetch all secrets in parallel to avoid serial HTTPS round-trips (18 × ~2s = 36s)
     from concurrent.futures import ThreadPoolExecutor, as_completed

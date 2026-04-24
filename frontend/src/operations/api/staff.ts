@@ -10,6 +10,9 @@ export interface StaffMember {
   role: "admin" | "dispatcher" | "technician";
   color: string;
   is_active: boolean;
+  home_address: string | null;
+  home_lat: number | null;
+  home_lng: number | null;
   created_at: string;
 }
 
@@ -21,6 +24,9 @@ export interface CreateStaffRequest {
   email?: string;
   role?: "admin" | "dispatcher" | "technician";
   color?: string;
+  home_address?: string;
+  home_lat?: number;
+  home_lng?: number;
 }
 
 export interface UpdateStaffRequest {
@@ -31,6 +37,9 @@ export interface UpdateStaffRequest {
   role?: "admin" | "dispatcher" | "technician";
   color?: string;
   is_active?: boolean;
+  home_address?: string;
+  home_lat?: number;
+  home_lng?: number;
 }
 
 export async function listStaff(businessId: string, includeInactive = false): Promise<StaffMember[]> {
